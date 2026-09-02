@@ -1,0 +1,6 @@
+config.cfg
+__pycache__/
+*.pyc
+
+.DS_Store
+Thumbs.db
