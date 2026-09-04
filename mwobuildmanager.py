@@ -8,6 +8,7 @@ Compatible Linux et Windows (bibliotheque standard uniquement).
 
 import configparser
 import csv
+import io
 import json
 import re
 import shutil
@@ -25,6 +26,7 @@ LOCALES_DIR = SCRIPT_DIR / "locales"
 INVALID_CHARS = re.compile(r'[<>:"/\\|?*]')
 MAX_WEAPON_TYPES = 3
 MWO_STEAM_APPID = "342200"
+WEIGHT_CLASSES = ((35, "Light"), (55, "Medium"), (75, "Heavy"), (100, "Assault"))
 LOADOUTS_SUFFIX = ("saved games", "mechwarrior online", "mechloadouts")
 
 # base internal weapon name (Clan/DropShip prefix stripped) -> short abbreviation,
@@ -131,6 +133,49 @@ def load_weapons(path):
     return weapons
 
 
+def load_tonnage(path):
+    """chassis -> tonnage. Table editable a la main, absente du GameData.pak."""
+    tonnage = {}
+    if not Path(path).exists():
+        return tonnage
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            raw = (row.get("tonnage") or "").strip()
+            if raw.isdigit():
+                tonnage[row["chassis"]] = int(raw)
+    return tonnage
+
+
+def weight_class(tons):
+    for limit, name in WEIGHT_CLASSES:
+        if tons <= limit:
+            return name
+    return ""
+
+
+def current_profile_name(game_dir):
+    """Nom du dernier profil joueur utilise (.../MechWarrior Online/Profiles/<nom>)."""
+    profiles_dir = Path(game_dir).parent / "Profiles"
+    if not profiles_dir.is_dir():
+        return ""
+    best_name, best_time = "", -1
+    for profile_xml in profiles_dir.glob("*/profile.xml"):
+        try:
+            attrs = ET.parse(profile_xml).getroot().attrib
+        except ET.ParseError:
+            continue
+        name = attrs.get("Name", "")
+        if not name or name.lower() == "default":
+            continue
+        try:
+            played = int(attrs.get("LastPlayed", "0"))
+        except ValueError:
+            played = 0
+        if played > best_time:
+            best_name, best_time = name, played
+    return best_name
+
+
 def sanitize(name):
     name = INVALID_CHARS.sub("", name)
     return re.sub(r"\s+", " ", name).strip()
@@ -152,6 +197,218 @@ def decode_loadout(xml_path, mechs, weapons):
         weapon_instances.append((abbr, tons))
 
     return variant, weapon_instances
+
+
+# ---------------------------------------------------------------------------
+# Codec des codes de build (contenu des .mwl)
+#
+# Un .mwl contient le code de partage du jeu : des chiffres base 64 en
+# little-endian (valeur = ord(c) - 48, donc '0'..'o'), ce qui laisse 'p'..'w'
+# et '|' libres comme marqueurs de structure. Format :
+#   'A' | id du mech (2) | 3 chiffres d'en-tete | blocs composants | 'w' | 3x2 arriere
+# Un bloc composant = [marqueur] armure (2) [omnipod (longueur variable, sans
+# separateur)] puis chaque objet sous la forme '|' + chiffres (longueur variable).
+# Les trois chiffres d'en-tete :
+#   [0] index armure + 8 * index structure
+#   [1] bit0 = Artemis, bits 1-2 = index refroidisseurs (bit3 inutilise)
+#   [2] index actionneur gauche * 4 + index actionneur droit
+# Les tables d'index suivent l'ordre de declaration de UpgradeTypes.xml.
+
+ARMOR_TYPES = ["2810", "2811", "2812", "2814", "2815", "2816"]
+STRUCTURE_TYPES = ["3100", "3101", "3102", "3103"]
+HEATSINK_TYPES = ["3003", "3002", "3005", "3006"]
+ACTUATOR_STATES = [
+    "EActuatorState_HandsAndArms",
+    "EActuatorState_ArmsOnly",
+    "EActuatorState_None",
+]
+CODE_COMPONENTS = [
+    ("centre_torso", None), ("right_torso", "p"), ("left_torso", "q"),
+    ("left_arm", "r"), ("right_arm", "s"), ("left_leg", "t"),
+    ("right_leg", "u"), ("head", "v"),
+]
+REAR_COMPONENTS = ["centre_torso_rear", "left_torso_rear", "right_torso_rear"]
+# Un code ne contient jamais d'espace ni de virgule, mais ";" est un chiffre
+# valide a l'interieur d'un code : on ne coupe sur ";" que s'il est suivi
+# d'un espace, d'une virgule ou de la fin de la saisie.
+CODE_SEPARATORS = re.compile(r";(?=[\s,]|$)|[,\s]+")
+
+
+class BadBuildCode(ValueError):
+    pass
+
+
+def split_build_codes(raw):
+    """Decoupe une saisie libre en codes : ', ', '; ' ou un code par ligne.
+    Un meme code colle plusieurs fois n'est garde qu'une seule fois."""
+    codes = []
+    seen = set()
+    for chunk in CODE_SEPARATORS.split(raw):
+        chunk = chunk.strip('"\'')
+        if chunk and chunk not in seen:
+            seen.add(chunk)
+            codes.append(chunk)
+    return codes
+
+
+def looks_like_build_code(text):
+    try:
+        decode_build_code(text)
+    except BadBuildCode:
+        return False
+    return True
+
+
+def extract_codes_from_csv(path):
+    """Repere seule la colonne des codes de build, quel que soit l'en-tete.
+    Plusieurs delimiteurs sont essayes : ';' est un caractere valide dans un
+    code, seul celui qui donne le plus de codes lisibles est retenu."""
+    raw = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    best_codes = []
+    for delimiter in (",", ";", "\t"):
+        rows = list(csv.reader(io.StringIO(raw), delimiter=delimiter))
+        scores = {}
+        for row in rows:
+            for column, cell in enumerate(row):
+                if looks_like_build_code(cell.strip()):
+                    scores[column] = scores.get(column, 0) + 1
+        if not scores:
+            continue
+        column = max(scores, key=scores.get)
+        codes = [row[column].strip() for row in rows
+                 if column < len(row) and looks_like_build_code(row[column].strip())]
+        if len(codes) > len(best_codes):
+            best_codes = codes
+    return best_codes
+
+
+def _code_value(chunk):
+    value = 0
+    for i, char in enumerate(chunk):
+        digit = ord(char) - 48
+        if not 0 <= digit < 64:
+            raise BadBuildCode(chunk)
+        value += digit * (64 ** i)
+    return value
+
+
+def _code_run_end(code, start):
+    """Fin de la suite de chiffres commencant a start ('|' et 'p'..'w' arretent)."""
+    end = start
+    while end < len(code) and 48 <= ord(code[end]) < 112:
+        end += 1
+    return end
+
+
+def decode_build_code(code):
+    """Code de partage -> dict decrivant le loadout. Leve BadBuildCode si invalide."""
+    code = code.strip()
+    if not code.startswith("A"):
+        raise BadBuildCode(code)
+
+    def take(pos, n):
+        if pos + n > len(code):
+            raise BadBuildCode(code)
+        return _code_value(code[pos:pos + n]), pos + n
+
+    mech_id, i = take(1, 2)
+    upgrades_digit, i = take(i, 1)
+    flags_digit, i = take(i, 1)
+    actuators_digit, i = take(i, 1)
+
+    components = []
+    for name, marker in CODE_COMPONENTS:
+        if marker is not None:
+            if i >= len(code) or code[i] != marker:
+                raise BadBuildCode(code)
+            i += 1
+        armor, i = take(i, 2)
+
+        omnipod = None
+        end = _code_run_end(code, i)
+        if end > i:
+            omnipod = _code_value(code[i:end])
+            i = end
+
+        items = []
+        while i < len(code) and code[i] == "|":
+            end = _code_run_end(code, i + 1)
+            if end == i + 1:
+                raise BadBuildCode(code)
+            items.append(_code_value(code[i + 1:end]))
+            i = end
+        components.append((name, armor, omnipod, items))
+
+    if i >= len(code) or code[i] != "w":
+        raise BadBuildCode(code)
+    i += 1
+    rear_armor = []
+    for _ in range(3):
+        value, i = take(i, 2)
+        rear_armor.append(value)
+    if i != len(code):
+        raise BadBuildCode(code)
+
+    armor_index, structure_index = upgrades_digit % 8, upgrades_digit // 8
+    left_index, right_index = actuators_digit // 4, actuators_digit % 4
+    if (armor_index >= len(ARMOR_TYPES) or structure_index >= len(STRUCTURE_TYPES)
+            or left_index >= len(ACTUATOR_STATES) or right_index >= len(ACTUATOR_STATES)):
+        raise BadBuildCode(code)
+
+    return {
+        "mech_id": str(mech_id),
+        "armor": ARMOR_TYPES[armor_index],
+        "structure": STRUCTURE_TYPES[structure_index],
+        "heatsinks": HEATSINK_TYPES[(flags_digit >> 1) & 3],
+        "artemis": flags_digit & 1,
+        "left_actuator": ACTUATOR_STATES[left_index],
+        "right_actuator": ACTUATOR_STATES[right_index],
+        "components": components,
+        "rear_armor": rear_armor,
+    }
+
+
+def build_loadout_xml(build, weapons):
+    """Reconstruit le .xml exactement comme le jeu l'ecrit (indentation, CRLF)."""
+    lines = [
+        '<Loadout MechID="%s">' % build["mech_id"],
+        " <Upgrades>",
+        '  <Armor ItemID="%s"/>' % build["armor"],
+        '  <Structure ItemID="%s"/>' % build["structure"],
+        '  <Artemis Equipped="%d"/>' % build["artemis"],
+        '  <HeatSinks ItemID="%s"/>' % build["heatsinks"],
+        " </Upgrades>",
+        ' <ActuatorState RightActuatorState="%s" LeftActuatorState="%s"/>'
+        % (build["right_actuator"], build["left_actuator"]),
+        " <ComponentList>",
+    ]
+    for name, armor, omnipod, items in build["components"]:
+        attrs = 'name="%s" Armor="%d"' % (name, armor)
+        if omnipod is not None:
+            attrs += ' Omnipod="%d"' % omnipod
+        if not items:
+            lines.append("  <component %s/>" % attrs)
+            continue
+        lines.append("  <component %s>" % attrs)
+        for item_id in items:
+            tag = "Weapon" if str(item_id) in weapons else "Module"
+            lines.append('   <%s ItemID="%d"/>' % (tag, item_id))
+        lines.append("  </component>")
+    for name, armor in zip(REAR_COMPONENTS, build["rear_armor"]):
+        lines.append('  <component name="%s" Armor="%d"/>' % (name, armor))
+    lines += [" </ComponentList>", "</Loadout>"]
+    return "\r\n".join(lines) + "\r\n"
+
+
+def build_weapon_instances(build, weapons):
+    """Armes du build sous la forme attendue par build_suffix()."""
+    instances = []
+    for _name, _armor, _omnipod, items in build["components"]:
+        for item_id in items:
+            entry = weapons.get(str(item_id))
+            if entry:
+                instances.append(entry)
+    return instances
 
 
 class NoQualifyingWeapon(ValueError):
@@ -199,6 +456,19 @@ def unique_target(base_name, ext, used_names):
         candidate = f"{base_name} ({n}){ext}"
         n += 1
     used_names.add(candidate.lower())
+    return candidate
+
+
+def unique_pair_stem(base_name, used_names):
+    """Nom de base libre pour la paire .xml + .mwl d'un loadout importe."""
+    candidate = base_name
+    n = 2
+    while (f"{candidate}.xml".lower() in used_names
+           or f"{candidate}.mwl".lower() in used_names):
+        candidate = f"{base_name} ({n})"
+        n += 1
+    used_names.add(f"{candidate}.xml".lower())
+    used_names.add(f"{candidate}.mwl".lower())
     return candidate
 
 
@@ -274,6 +544,52 @@ def ask_folder(t, title_key, initial_dir=None, allow_skip=False,
         if folder.is_dir():
             return folder
         print(t("folder_not_found"))
+
+
+def pick_file_gui(title, initial_dir=None):
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askopenfilename(title=title, initialdir=initial_dir or str(Path.home()))
+        root.destroy()
+        if path:
+            return path
+    except Exception:
+        pass
+
+    if sys.platform.startswith("linux"):
+        for cmd in (
+            ["zenity", "--file-selection", "--title", title],
+            ["kdialog", "--getopenfilename", initial_dir or str(Path.home()), "--title", title],
+        ):
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                out = result.stdout.strip()
+                if result.returncode == 0 and out:
+                    return out
+            except FileNotFoundError:
+                continue
+
+    return None
+
+
+def ask_file(t, title_key, initial_dir=None):
+    picked = pick_file_gui(t(title_key), initial_dir)
+    if picked and Path(picked).is_file():
+        return Path(picked)
+
+    print(t("gui_unavailable"))
+    while True:
+        raw = input(t("manual_file_prompt")).strip().strip('"')
+        if not raw:
+            return None
+        path = Path(raw).expanduser()
+        if path.is_file():
+            return path
+        print(t("file_not_found"))
 
 
 def looks_like_loadouts_dir(path):
@@ -513,7 +829,35 @@ def update_weapons_csv(pak_path, weapons_csv_path, overwrite_existing):
     return added
 
 
-def do_update(cfg, mechs, weapons, t):
+def update_tonnage_csv(mechs_csv_path, tonnage_csv_path):
+    """Ajoute les chassis inconnus avec un tonnage vide, a remplir a la main.
+    Le tonnage n'est nulle part dans les fichiers du jeu : on ne l'ecrase jamais."""
+    known = []
+    seen = set()
+    if Path(tonnage_csv_path).exists():
+        with open(tonnage_csv_path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                known.append((row["chassis"], row.get("tonnage", "")))
+                seen.add(row["chassis"])
+
+    added = 0
+    with open(mechs_csv_path, newline="", encoding="utf-8") as f:
+        for chassis in sorted({row["chassis"] for row in csv.DictReader(f)}):
+            if chassis not in seen:
+                known.append((chassis, ""))
+                seen.add(chassis)
+                added += 1
+
+    if added or not Path(tonnage_csv_path).exists():
+        known.sort()
+        with open(tonnage_csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["chassis", "tonnage"])
+            writer.writerows(known)
+    return added
+
+
+def do_update(cfg, mechs, weapons, tonnage, t):
     install_dir = resolve_install_dir(cfg, t)
     if not install_dir:
         print(t("installdir_cancelled"))
@@ -522,16 +866,21 @@ def do_update(cfg, mechs, weapons, t):
     pak_path = install_dir / "Game" / "GameData.pak"
     mech_count = write_mechs_csv(pak_path, SCRIPT_DIR / "mechs.csv")
     added_weapons = update_weapons_csv(pak_path, SCRIPT_DIR / "weapons.csv", overwrite_existing=False)
+    added_chassis = update_tonnage_csv(SCRIPT_DIR / "mechs.csv", SCRIPT_DIR / "mech_tonnage.csv")
 
     mechs.clear()
     mechs.update(load_mechs(SCRIPT_DIR / "mechs.csv"))
     weapons.clear()
     weapons.update(load_weapons(SCRIPT_DIR / "weapons.csv"))
+    tonnage.clear()
+    tonnage.update(load_tonnage(SCRIPT_DIR / "mech_tonnage.csv"))
 
     print(t("update_done", mechs=mech_count, weapons=added_weapons))
+    if added_chassis:
+        print(t("update_tonnage_added", n=added_chassis))
 
 
-def do_reset(cfg, mechs, weapons, t):
+def do_reset(cfg, mechs, weapons, tonnage, t):
     if not ask_yes_no(t, "reset_confirm"):
         return t
 
@@ -543,11 +892,14 @@ def do_reset(cfg, mechs, weapons, t):
     pak_path = install_dir / "Game" / "GameData.pak"
     write_mechs_csv(pak_path, SCRIPT_DIR / "mechs.csv")
     update_weapons_csv(pak_path, SCRIPT_DIR / "weapons.csv", overwrite_existing=True)
+    update_tonnage_csv(SCRIPT_DIR / "mechs.csv", SCRIPT_DIR / "mech_tonnage.csv")
 
     mechs.clear()
     mechs.update(load_mechs(SCRIPT_DIR / "mechs.csv"))
     weapons.clear()
     weapons.update(load_weapons(SCRIPT_DIR / "weapons.csv"))
+    tonnage.clear()
+    tonnage.update(load_tonnage(SCRIPT_DIR / "mech_tonnage.csv"))
 
     if CONFIG_PATH.exists():
         CONFIG_PATH.unlink()
@@ -604,7 +956,44 @@ def create_archive(staging_dir, dest_dir, name, fmt):
     return archive_path, "zip"
 
 
-def do_export(cfg, t):
+def ask_export_kind(t):
+    while True:
+        choice = input(t("export_kind_prompt")).strip()
+        if choice in ("1", ""):
+            return "archive"
+        if choice == "2":
+            return "csv"
+        print(t("export_kind_invalid"))
+
+
+def export_csv(game_dir, basenames, dest_dir, name, mechs, tonnage):
+    """Une ligne par build : nom, code, variante, tonnage, classe, proprietaire."""
+    owner = current_profile_name(game_dir)
+    rows = []
+    missing = set()
+    for basename in basenames:
+        mwl_path = game_dir / f"{basename}.mwl"
+        code = mwl_path.read_text(encoding="utf-8", errors="replace").strip() if mwl_path.exists() else ""
+        try:
+            mech_id = ET.parse(game_dir / f"{basename}.xml").getroot().attrib.get("MechID", "")
+        except ET.ParseError:
+            mech_id = ""
+        chassis, variant = mechs.get(mech_id, ("", ""))
+        tons = tonnage.get(chassis)
+        if chassis and tons is None:
+            missing.add(chassis)
+        rows.append([basename, code, (variant or "").upper(),
+                     tons or "", weight_class(tons) if tons else "", owner])
+
+    csv_path = dest_dir / f"{name}.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["name", "buildcode", "mechvariant", "tonnage", "class", "owner"])
+        writer.writerows(rows)
+    return csv_path, len(rows), sorted(missing), owner
+
+
+def do_export(cfg, mechs, tonnage, t):
     game_dir = cfg["general"].get("game_dir", "")
     if not game_dir or not Path(game_dir).is_dir():
         print(t("export_no_gamedir"))
@@ -616,18 +1005,31 @@ def do_export(cfg, t):
         print(t("export_no_files"))
         return
 
+    kind = ask_export_kind(t)
+
     name = sanitize(input(t("export_name_prompt")).strip())
     if not name:
         print(t("export_cancelled"))
         return
 
-    fmt = ask_archive_format(t)
+    fmt = ask_archive_format(t) if kind == "archive" else None
 
     last_export_dir = cfg["last_used"].get("export_dir", "")
     dest_dir = ask_folder(t, "pick_export_dest_title", last_export_dir or None, allow_skip=True,
                           manual_prompt_key="manual_export_dest_prompt")
     if dest_dir is None:
         print(t("export_cancelled"))
+        return
+
+    if kind == "csv":
+        csv_path, count, missing, owner = export_csv(game_dir, basenames, dest_dir, name, mechs, tonnage)
+        cfg["last_used"]["export_dir"] = str(dest_dir)
+        save_config(cfg)
+        print(t("export_csv_done", n=count, path=csv_path))
+        if not owner:
+            print(t("export_csv_no_owner"))
+        if missing:
+            print(t("export_csv_no_tonnage", n=len(missing), chassis=", ".join(missing)))
         return
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -648,6 +1050,154 @@ def do_export(cfg, t):
     print(t("export_done", n=copied, path=archive_path))
     if used_fmt != fmt:
         print(t("export_fallback_zip", requested=fmt))
+
+
+# ---------------------------------------------------------------------------
+# Import de builds depuis des codes de partage
+
+# Fin de saisie : une ligne vide ne suffit pas, un bloc colle en contient
+# souvent (separateurs entre groupes de builds).
+CODE_INPUT_END = {".", "end"}
+
+
+def read_pasted_codes(t):
+    print(t("import_intro"))
+    lines = []
+    first = True
+    while True:
+        try:
+            line = input(t("import_codes_prompt") if first else "")
+        except EOFError:
+            break
+        first = False
+        if line.strip().lower() in CODE_INPUT_END:
+            break
+        lines.append(line)
+    return split_build_codes("\n".join(lines))
+
+
+def read_build_codes(cfg, t):
+    """1) saisie directe  2) fichier .txt  3) fichier .csv (colonne auto-detectee)"""
+    while True:
+        choice = input(t("import_source_prompt")).strip()
+        if choice in ("1", ""):
+            return read_pasted_codes(t)
+        if choice in ("2", "3"):
+            break
+        print(t("import_source_invalid"))
+
+    title_key = "pick_txt_title" if choice == "2" else "pick_csv_title"
+    path = ask_file(t, title_key, cfg["last_used"].get("import_dir", "") or None)
+    if path is None:
+        return []
+
+    cfg["last_used"]["import_dir"] = str(path.parent)
+    save_config(cfg)
+
+    try:
+        if choice == "3":
+            codes = extract_codes_from_csv(path)
+        else:
+            codes = split_build_codes(path.read_text(encoding="utf-8-sig", errors="replace"))
+    except OSError as e:
+        print(t("import_file_error", path=path, reason=e))
+        return []
+
+    print(t("import_file_loaded", n=len(codes), path=path))
+    return codes
+
+
+def ask_import_dest(cfg, t):
+    """Dossier du jeu, ou n'importe quel autre dossier."""
+    game_dir = cfg["general"].get("game_dir", "")
+    if game_dir and Path(game_dir).is_dir():
+        while True:
+            choice = input(t("import_dest_prompt", path=game_dir)).strip()
+            if choice in ("1", ""):
+                return Path(game_dir)
+            if choice == "2":
+                break
+            print(t("import_dest_invalid"))
+    else:
+        print(t("import_dest_no_gamedir"))
+
+    return ask_folder(t, "pick_import_dest_title", game_dir or None, allow_skip=True,
+                      manual_prompt_key="manual_import_dest_prompt")
+
+
+def do_import(cfg, mechs, weapons, t):
+    codes = read_build_codes(cfg, t)
+    if not codes:
+        print(t("import_no_codes"))
+        return
+
+    add_prefix = ask_yes_no(t, "ask_prefix_yn")
+    prefix = input(t("ask_prefix_text")).strip() if add_prefix else ""
+    add_suffix = ask_yes_no(t, "ask_suffix_yn")
+
+    plan = []
+    skipped = []
+    for code in codes:
+        label = code if len(code) <= 24 else code[:24] + "..."
+        try:
+            build = decode_build_code(code)
+        except BadBuildCode:
+            skipped.append((label, t("import_invalid_code")))
+            continue
+
+        _chassis, variant = mechs.get(build["mech_id"], (None, None))
+        parts = []
+        if prefix:
+            parts.append(prefix)
+        parts.append(variant.upper() if variant else "UNKNOWN")
+        if add_suffix:
+            try:
+                parts.append(build_suffix(build_weapon_instances(build, weapons), t))
+            except NoQualifyingWeapon as e:
+                skipped.append((label, str(e)))
+                continue
+        plan.append((code, build, sanitize(" ".join(parts))))
+
+    if skipped:
+        print(t("skipped_header", n=len(skipped)))
+        for label, reason in skipped:
+            print(t("skipped_line", name=label, reason=reason))
+
+    if not plan:
+        print(t("import_nothing"))
+        return
+
+    print(t("import_preview_header"))
+    for i, (_code, _build, name) in enumerate(plan, start=1):
+        print(f" {i:3d}. {name}")
+
+    print(t("selection_help"))
+    while True:
+        selection = parse_selection(input(t("selection_prompt")), len(plan), t)
+        if selection is not None:
+            break
+    if not selection:
+        print(t("import_none"))
+        return
+
+    dest = ask_import_dest(cfg, t)
+    if dest is None:
+        print(t("import_cancelled"))
+        return
+
+    used_names = {p.name.lower() for p in dest.iterdir()}
+    written = 0
+    for i, (code, build, name) in enumerate(plan, start=1):
+        if i not in selection:
+            continue
+        stem = unique_pair_stem(name, used_names)
+        with open(dest / f"{stem}.xml", "w", encoding="utf-8", newline="") as f:
+            f.write(build_loadout_xml(build, weapons))
+        with open(dest / f"{stem}.mwl", "w", encoding="utf-8", newline="") as f:
+            f.write(code)
+        written += 1
+
+    print(t("import_done", n=written, path=dest))
 
 
 # ---------------------------------------------------------------------------
@@ -858,6 +1408,7 @@ def main():
 
     mechs = load_mechs(mechs_csv)
     weapons = load_weapons(weapons_csv)
+    tonnage = load_tonnage(SCRIPT_DIR / "mech_tonnage.csv")
 
     cfg = load_config()
     if not CONFIG_PATH.exists():
@@ -872,11 +1423,12 @@ def main():
         print(t("menu_title"))
         print(f"1) {t('menu_quick')}  ({t('menu_quick_example', example=quick_example(cfg))})")
         print(f"2) {t('menu_advanced')}")
-        print(f"3) {t('menu_export')}")
-        print(f"4) {t('menu_update')}")
-        print(f"5) {t('menu_reset')}")
-        print(f"6) {t('menu_settings')}")
-        print(f"7) {t('menu_exit')}")
+        print(f"3) {t('menu_import')}")
+        print(f"4) {t('menu_export')}")
+        print(f"5) {t('menu_update')}")
+        print(f"6) {t('menu_reset')}")
+        print(f"7) {t('menu_settings')}")
+        print(f"8) {t('menu_exit')}")
         choice = input(t("menu_prompt")).strip()
 
         if choice == "1":
@@ -884,14 +1436,16 @@ def main():
         elif choice == "2":
             do_advanced(cfg, mechs, weapons, t)
         elif choice == "3":
-            do_export(cfg, t)
+            do_import(cfg, mechs, weapons, t)
         elif choice == "4":
-            do_update(cfg, mechs, weapons, t)
+            do_export(cfg, mechs, tonnage, t)
         elif choice == "5":
-            t = do_reset(cfg, mechs, weapons, t)
+            do_update(cfg, mechs, weapons, tonnage, t)
         elif choice == "6":
-            t = settings_menu(cfg, t)
+            t = do_reset(cfg, mechs, weapons, tonnage, t)
         elif choice == "7":
+            t = settings_menu(cfg, t)
+        elif choice == "8":
             break
         else:
             print(t("menu_invalid"))
