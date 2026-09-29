@@ -26,6 +26,10 @@ from xml.etree import ElementTree as ET
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = SCRIPT_DIR / "config.cfg"
 LOCALES_DIR = SCRIPT_DIR / "locales"
+DATA_DIR = SCRIPT_DIR / "data"
+# toutes les tables CSV vivent dans data/ (avant la 1.6 : a cote du script)
+DATA_FILES = ("mechs.csv", "weapons.csv", "equipment.csv", "engines.csv", "omnipods.csv",
+              "weapon_ranges.csv", "targeting_computers.csv", "build_registry.csv")
 INVALID_CHARS = re.compile(r'[<>:"/\\|?*]')
 MAX_WEAPON_TYPES = 3
 MWO_STEAM_APPID = "342200"
@@ -33,7 +37,7 @@ WEIGHT_CLASSES = ((35, "Light"), (55, "Medium"), (75, "Heavy"), (100, "Assault")
 ENGINE_MODES = ("all", "type", "none")
 DEFAULT_STRUCTURE_MODIFIER = 0.5
 PROJECT_URL = "https://github.com/SHDMk2/mwobuildmanager"
-REGISTRY_PATH = SCRIPT_DIR / "build_registry.csv"
+REGISTRY_PATH = DATA_DIR / "build_registry.csv"
 
 # Engine_<type>_<rating> dans Engines.xml -> abreviation du type
 ENGINE_TYPE_ABBR = {"Std": "STD", "XL": "XL", "Light": "LFE", "Clan_XL": "CXL"}
@@ -271,20 +275,20 @@ def load_targeting_computers(path):
 
 
 def load_gamedata():
-    equipment, order, jump_jets = load_equipment(SCRIPT_DIR / "equipment.csv")
-    engines, is_xl = load_engines(SCRIPT_DIR / "engines.csv")
-    pods, set_bonuses = load_omnipods(SCRIPT_DIR / "omnipods.csv")
+    equipment, order, jump_jets = load_equipment(DATA_DIR / "equipment.csv")
+    engines, is_xl = load_engines(DATA_DIR / "engines.csv")
+    pods, set_bonuses = load_omnipods(DATA_DIR / "omnipods.csv")
     return {
         "engines": engines,
         "is_xl_engines": is_xl,
         "equipment": equipment,
         "equipment_order": order,
         "jump_jets": jump_jets,
-        "mech_specs": load_mech_specs(SCRIPT_DIR / "mechs.csv"),
+        "mech_specs": load_mech_specs(DATA_DIR / "mechs.csv"),
         "pods": pods,
         "set_bonuses": set_bonuses,
-        "weapon_ranges": load_weapon_ranges(SCRIPT_DIR / "weapon_ranges.csv"),
-        "targeting_computers": load_targeting_computers(SCRIPT_DIR / "targeting_computers.csv"),
+        "weapon_ranges": load_weapon_ranges(DATA_DIR / "weapon_ranges.csv"),
+        "targeting_computers": load_targeting_computers(DATA_DIR / "targeting_computers.csv"),
     }
 
 
@@ -1423,11 +1427,11 @@ def update_editable_tables(pak_path, overwrite_existing):
     """-> (armes ajoutees, equipements ajoutes, moteurs ajoutes)."""
     weapons = [(wid, name, tons, guess_abbreviation(name)) for wid, name, tons in fetch_weapons_from_pak(pak_path)]
     return (
-        merge_table(SCRIPT_DIR / "weapons.csv", ["id", "name", "tons", "abbreviation"], weapons,
+        merge_table(DATA_DIR / "weapons.csv", ["id", "name", "tons", "abbreviation"], weapons,
                     overwrite_existing),
-        merge_table(SCRIPT_DIR / "equipment.csv", ["id", "name", "abbreviation"],
+        merge_table(DATA_DIR / "equipment.csv", ["id", "name", "abbreviation"],
                     fetch_equipment_from_pak(pak_path), overwrite_existing, _equipment_order),
-        merge_table(SCRIPT_DIR / "engines.csv", ["id", "name", "type", "rating"],
+        merge_table(DATA_DIR / "engines.csv", ["id", "name", "type", "rating"],
                     fetch_engines_from_pak(pak_path), overwrite_existing),
     )
 
@@ -1436,13 +1440,13 @@ def write_game_tables(game_root):
     """Tables 100 % issues du jeu, regenerees entierement (jamais editees a la main)."""
     pak_path = game_root / "GameData.pak"
     return {
-        "mechs": write_csv(SCRIPT_DIR / "mechs.csv", MECHS_CSV_HEADER, fetch_mechs_from_game(game_root)),
-        "pods": write_csv(SCRIPT_DIR / "omnipods.csv",
+        "mechs": write_csv(DATA_DIR / "mechs.csv", MECHS_CSV_HEADER, fetch_mechs_from_game(game_root)),
+        "pods": write_csv(DATA_DIR / "omnipods.csv",
                           ["id", "chassis", "set", "component", "fixed_items", "quirks"],
                           fetch_omnipods_from_game(game_root)),
-        "ranges": write_csv(SCRIPT_DIR / "weapon_ranges.csv", ["id", "name", "optimal_range", "aliases"],
+        "ranges": write_csv(DATA_DIR / "weapon_ranges.csv", ["id", "name", "optimal_range", "aliases"],
                             fetch_weapon_ranges_from_pak(pak_path)),
-        "tcs": write_csv(SCRIPT_DIR / "targeting_computers.csv", ["id", "name", "weapons", "range_multiplier"],
+        "tcs": write_csv(DATA_DIR / "targeting_computers.csv", ["id", "name", "weapons", "range_multiplier"],
                          fetch_targeting_computers_from_pak(pak_path)),
     }
 
@@ -1450,9 +1454,9 @@ def write_game_tables(game_root):
 def reload_tables(mechs, weapons, gamedata):
     read_pak_xml.cache_clear()
     mechs.clear()
-    mechs.update(load_mechs(SCRIPT_DIR / "mechs.csv"))
+    mechs.update(load_mechs(DATA_DIR / "mechs.csv"))
     weapons.clear()
-    weapons.update(load_weapons(SCRIPT_DIR / "weapons.csv"))
+    weapons.update(load_weapons(DATA_DIR / "weapons.csv"))
     gamedata.clear()
     gamedata.update(load_gamedata())
 
@@ -2025,11 +2029,23 @@ def settings_menu(cfg, t):
             print(t("menu_invalid"))
 
 
+def migrate_data_files():
+    """Deplace dans data/ les CSV laisses a cote du script par une version
+    anterieure (ex. build_registry.csv, non suivi par git). Ne remplace jamais
+    un fichier deja present dans data/."""
+    for name in DATA_FILES:
+        old, new = SCRIPT_DIR / name, DATA_DIR / name
+        if old.is_file() and not new.exists():
+            DATA_DIR.mkdir(exist_ok=True)
+            shutil.move(str(old), str(new))
+
+
 def main():
-    mechs_csv = SCRIPT_DIR / "mechs.csv"
-    weapons_csv = SCRIPT_DIR / "weapons.csv"
+    migrate_data_files()
+    mechs_csv = DATA_DIR / "mechs.csv"
+    weapons_csv = DATA_DIR / "weapons.csv"
     if not mechs_csv.exists() or not weapons_csv.exists():
-        print(f"Erreur : mechs.csv et weapons.csv doivent etre a cote de ce script ({SCRIPT_DIR})")
+        print(f"Erreur : mechs.csv et weapons.csv doivent etre dans le dossier data/ ({DATA_DIR})")
         sys.exit(1)
     if not (LOCALES_DIR / "en.json").exists():
         print(f"Erreur : le dossier locales/ (avec au moins en.json) doit etre a cote de ce script ({SCRIPT_DIR})")
