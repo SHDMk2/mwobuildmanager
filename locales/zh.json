@@ -23,6 +23,8 @@
   "menu_update": "更新机甲/武器数据库",
   "menu_reset": "重置配置",
   "menu_settings": "设置",
+  "menu_support": "支持我",
+  "support_text": "帮我付 claude 的钱吧 ;p {url}",
   "menu_exit": "退出",
   "menu_prompt": "选择：",
   "menu_invalid": "无效选择。",

@@ -23,6 +23,8 @@
   "menu_update": "Update mech/weapon database",
   "menu_reset": "Reset configuration",
   "menu_settings": "Settings",
+  "menu_support": "Support me",
+  "support_text": "Help me pay for claude ;p {url}",
   "menu_exit": "Exit",
   "menu_prompt": "Choice: ",
   "menu_invalid": "Invalid choice.",

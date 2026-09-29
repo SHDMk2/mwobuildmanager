@@ -23,6 +23,8 @@
   "menu_update": "Mech-/Waffendatenbank aktualisieren",
   "menu_reset": "Konfiguration zurücksetzen",
   "menu_settings": "Einstellungen",
+  "menu_support": "Unterstütze mich",
+  "support_text": "Hilf mir, claude zu bezahlen ;p {url}",
   "menu_exit": "Beenden",
   "menu_prompt": "Auswahl: ",
   "menu_invalid": "Ungültige Auswahl.",

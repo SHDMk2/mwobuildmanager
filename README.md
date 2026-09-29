@@ -146,6 +146,10 @@ Same as Update, but also rewrites `weapons.csv`, `equipment.csv` and `engines.cs
 
 Language, game loadouts folder, game install folder, automatic backup on/off, structure modifier used for the HP stats.
 
+### 8. Support me
+
+Shows the donation link — [paypal.me/ToulouseServers](https://paypal.me/ToulouseServers). The tool is free and always will be; this is only there if you feel like it.
+
 ## config.cfg
 
 Every option is written to `config.cfg` with its default value the first time the tool runs a version that knows about it, so the file always shows what you can change. Key names are case-insensitive, and an option removed by hand simply falls back to its default.

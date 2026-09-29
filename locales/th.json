@@ -23,6 +23,8 @@
   "menu_update": "อัปเดตฐานข้อมูลเมค/อาวุธ",
   "menu_reset": "รีเซ็ตการตั้งค่า",
   "menu_settings": "ตั้งค่า",
+  "menu_support": "สนับสนุนฉัน",
+  "support_text": "ช่วยฉันจ่ายค่า claude หน่อย ;p {url}",
   "menu_exit": "ออก",
   "menu_prompt": "เลือก: ",
   "menu_invalid": "ตัวเลือกไม่ถูกต้อง",

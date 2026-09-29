@@ -23,6 +23,8 @@
   "menu_update": "Mettre a jour la base mechs/armes",
   "menu_reset": "Reinitialiser la configuration",
   "menu_settings": "Parametres",
+  "menu_support": "Me soutenir",
+  "support_text": "Aide-moi a payer claude ;p {url}",
   "menu_exit": "Quitter",
   "menu_prompt": "Choix : ",
   "menu_invalid": "Choix invalide.",

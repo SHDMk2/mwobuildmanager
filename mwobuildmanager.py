@@ -57,6 +57,7 @@ EXPORT_CSV_COLUMNS = ("name", "mechvariant", "class", "tonnage", "tech", "buildc
                       "optimal_range", "leg_hp", "kill_hp", "total_hp",
                       "owner", "date")
 PROJECT_URL = "https://github.com/SHDMk2/mwobuildmanager"
+DONATE_URL = "paypal.me/ToulouseServers"
 REGISTRY_PATH = DATA_DIR / "build_registry.csv"
 
 # Engine_<type>_<rating> dans Engines.xml -> abreviation du type
@@ -2445,7 +2446,8 @@ def main():
         print(f"5) {t('menu_update')}")
         print(f"6) {t('menu_reset')}")
         print(f"7) {t('menu_settings')}")
-        print(f"8) {t('menu_exit')}")
+        print(f"8) {t('menu_support')}")
+        print(f"9) {t('menu_exit')}")
         choice = input(t("menu_prompt")).strip()
 
         if choice == "1":
@@ -2463,6 +2465,8 @@ def main():
         elif choice == "7":
             t = settings_menu(cfg, t)
         elif choice == "8":
+            print(t("support_text", url=DONATE_URL))
+        elif choice == "9":
             break
         else:
             print(t("menu_invalid"))
