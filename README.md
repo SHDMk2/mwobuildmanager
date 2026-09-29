@@ -217,6 +217,12 @@ Every build the tool touches (rename, import, CSV export) gets three comment lin
 
 Copy `locales/en.json` to `locales/<code>.json`, translate every value (keep the `{placeholder}` names like `{path}` or `{n}` unchanged), and set `_language_name` to the language's own name (e.g. `"Deutsch"`). It appears in the language menu automatically — no code change needed. `yes_words`/`no_words` are the accepted answers for yes/no prompts (`y`/`n` always work too, whatever the language).
 
+## Support
+
+The tool is free and stays free. If it saves you time, you can help me pay for Claude:
+
+[![Support me on PayPal](https://img.shields.io/badge/Support%20me-paypal.me%2FToulouseServers-0070ba?logo=paypal&logoColor=white)](https://paypal.me/ToulouseServers)
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
