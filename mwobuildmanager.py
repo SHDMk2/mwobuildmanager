@@ -56,6 +56,8 @@ EXPORT_CSV_COLUMNS = ("name", "mechvariant", "class", "tonnage", "tech", "buildc
                       "heatsink_type", "heatsinks", "heat_dissipation", "max_heat",
                       "optimal_range", "leg_hp", "kill_hp", "total_hp",
                       "owner", "date")
+APP_NAME = "MechLoadout Renamer"
+VERSION = "1.7"
 PROJECT_URL = "https://github.com/SHDMk2/mwobuildmanager"
 DONATE_URL = "paypal.me/ToulouseServers"
 REGISTRY_PATH = DATA_DIR / "build_registry.csv"
@@ -2410,6 +2412,7 @@ def migrate_data_files():
 
 
 def main():
+    print(f"{APP_NAME} {VERSION}")
     migrate_data_files()
     mechs_csv = DATA_DIR / "mechs.csv"
     weapons_csv = DATA_DIR / "weapons.csv"
