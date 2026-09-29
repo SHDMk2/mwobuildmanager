@@ -2,7 +2,7 @@ id,chassis,set,component,fixed_items,quirks
 30536,arcticcheetah,ach-a,head,,
 30537,arcticcheetah,ach-a,left_arm,,armorresist_la_additive=10;energy_range_multiplier=0.05;internalresist_la_additive=6
 30538,arcticcheetah,ach-a,left_torso,,armorresist_lt_additive=10;internalresist_lt_additive=6
-30539,arcticcheetah,ach-a,centre_torso,,internalresist_ct_additive=8
+30539,arcticcheetah,ach-a,centre_torso,,heatdissipation_multiplier=0.1;internalresist_ct_additive=8
 30540,arcticcheetah,ach-a,right_torso,,armorresist_rt_additive=10;internalresist_rt_additive=6
 30541,arcticcheetah,ach-a,right_arm,,armorresist_ra_additive=10;energy_range_multiplier=0.05;internalresist_ra_additive=6
 30542,arcticcheetah,ach-a,left_leg,,internalresist_ll_additive=8
@@ -11,7 +11,7 @@ id,chassis,set,component,fixed_items,quirks
 30544,arcticcheetah,ach-b,head,,
 30545,arcticcheetah,ach-b,left_arm,,armorresist_la_additive=10;internalresist_la_additive=6
 30546,arcticcheetah,ach-b,left_torso,,internalresist_lt_additive=14
-30547,arcticcheetah,ach-b,centre_torso,,internalresist_ct_additive=8
+30547,arcticcheetah,ach-b,centre_torso,,heatdissipation_multiplier=0.1;internalresist_ct_additive=8
 30548,arcticcheetah,ach-b,right_torso,,internalresist_rt_additive=14
 30549,arcticcheetah,ach-b,right_arm,,armorresist_ra_additive=12;internalresist_ra_additive=8
 30550,arcticcheetah,ach-b,left_leg,,internalresist_ll_additive=8
@@ -20,7 +20,7 @@ id,chassis,set,component,fixed_items,quirks
 30552,arcticcheetah,ach-c,head,,
 30553,arcticcheetah,ach-c,left_arm,,armorresist_la_additive=10;internalresist_la_additive=6
 30554,arcticcheetah,ach-c,left_torso,,internalresist_lt_additive=6
-30555,arcticcheetah,ach-c,centre_torso,,internalresist_ct_additive=8
+30555,arcticcheetah,ach-c,centre_torso,,heatdissipation_multiplier=0.1;internalresist_ct_additive=8
 30556,arcticcheetah,ach-c,right_torso,,internalresist_rt_additive=6
 30557,arcticcheetah,ach-c,right_arm,,armorresist_ra_additive=10;internalresist_ra_additive=6
 30558,arcticcheetah,ach-c,left_leg,,internalresist_ll_additive=8
@@ -28,7 +28,7 @@ id,chassis,set,component,fixed_items,quirks
 31017,arcticcheetah,ach-e,head,,
 31018,arcticcheetah,ach-e,left_arm,,armorresist_la_additive=10;internalresist_la_additive=6
 31019,arcticcheetah,ach-e,left_torso,,internalresist_lt_additive=6
-31020,arcticcheetah,ach-e,centre_torso,,internalresist_ct_additive=8
+31020,arcticcheetah,ach-e,centre_torso,,heatdissipation_multiplier=0.1;internalresist_ct_additive=8
 31021,arcticcheetah,ach-e,right_torso,,internalresist_rt_additive=6
 31022,arcticcheetah,ach-e,right_arm,,armorresist_ra_additive=10;internalresist_ra_additive=6
 31023,arcticcheetah,ach-e,left_leg,,internalresist_ll_additive=8
@@ -37,7 +37,7 @@ id,chassis,set,component,fixed_items,quirks
 30528,arcticcheetah,ach-prime,head,,
 30529,arcticcheetah,ach-prime,left_arm,,armorresist_la_additive=10;internalresist_la_additive=6
 30530,arcticcheetah,ach-prime,left_torso,,internalresist_lt_additive=6
-30531,arcticcheetah,ach-prime,centre_torso,,internalresist_ct_additive=8
+30531,arcticcheetah,ach-prime,centre_torso,,heatdissipation_multiplier=0.1;internalresist_ct_additive=8
 30532,arcticcheetah,ach-prime,right_torso,,internalresist_rt_additive=6
 30533,arcticcheetah,ach-prime,right_arm,,armorresist_ra_additive=10;internalresist_ra_additive=6
 30534,arcticcheetah,ach-prime,left_leg,,internalresist_ll_additive=8
@@ -45,7 +45,7 @@ id,chassis,set,component,fixed_items,quirks
 30945,arcticcheetah,ach-sh,head,,
 30946,arcticcheetah,ach-sh,left_arm,,internalresist_la_additive=8
 30947,arcticcheetah,ach-sh,left_torso,,internalresist_lt_additive=8
-30948,arcticcheetah,ach-sh,centre_torso,,internalresist_ct_additive=8
+30948,arcticcheetah,ach-sh,centre_torso,,heatdissipation_multiplier=0.1;internalresist_ct_additive=8
 30949,arcticcheetah,ach-sh,right_torso,,internalresist_rt_additive=8
 30950,arcticcheetah,ach-sh,right_arm,,internalresist_ra_additive=8
 30951,arcticcheetah,ach-sh,left_leg,,internalresist_ll_additive=8
@@ -53,7 +53,7 @@ id,chassis,set,component,fixed_items,quirks
 31089,arcticwolf,acw-a,head,,
 31090,arcticwolf,acw-a,left_arm,,armorresist_la_additive=10
 31091,arcticwolf,acw-a,left_torso,,armorresist_lt_additive=10
-31092,arcticwolf,acw-a,centre_torso,,armorresist_ct_additive=12
+31092,arcticwolf,acw-a,centre_torso,,armorresist_ct_additive=12;heatdissipation_multiplier=0.15
 31093,arcticwolf,acw-a,right_torso,,armorresist_rt_additive=10
 31094,arcticwolf,acw-a,right_arm,,armorresist_ra_additive=10
 31095,arcticwolf,acw-a,left_leg,,armorresist_ll_additive=10
@@ -61,7 +61,7 @@ id,chassis,set,component,fixed_items,quirks
 31097,arcticwolf,acw-p,head,,
 31098,arcticwolf,acw-p,left_arm,,armorresist_la_additive=10
 31099,arcticwolf,acw-p,left_torso,,armorresist_lt_additive=10
-31100,arcticwolf,acw-p,centre_torso,,armorresist_ct_additive=12
+31100,arcticwolf,acw-p,centre_torso,,armorresist_ct_additive=12;heatdissipation_multiplier=0.15
 31101,arcticwolf,acw-p,right_torso,,armorresist_rt_additive=10
 31102,arcticwolf,acw-p,right_arm,,armorresist_ra_additive=10
 31103,arcticwolf,acw-p,left_leg,,armorresist_ll_additive=10
@@ -69,7 +69,7 @@ id,chassis,set,component,fixed_items,quirks
 31081,arcticwolf,acw-prime,head,,
 31082,arcticwolf,acw-prime,left_arm,,armorresist_la_additive=10
 31083,arcticwolf,acw-prime,left_torso,1503;1503;1503,armorresist_lt_additive=10
-31084,arcticwolf,acw-prime,centre_torso,,armorresist_ct_additive=12
+31084,arcticwolf,acw-prime,centre_torso,,armorresist_ct_additive=12;heatdissipation_multiplier=0.15
 31085,arcticwolf,acw-prime,right_torso,1503;1503;1503,armorresist_rt_additive=10
 31086,arcticwolf,acw-prime,right_arm,,armorresist_ra_additive=10
 31087,arcticwolf,acw-prime,left_leg,,armorresist_ll_additive=10
@@ -77,7 +77,7 @@ id,chassis,set,component,fixed_items,quirks
 30032,adder,adr-a,head,,
 30033,adder,adr-a,left_arm,,armorresist_la_additive=6;internalresist_la_additive=6
 30034,adder,adr-a,left_torso,,armorresist_lt_additive=8
-30035,adder,adr-a,centre_torso,,armorresist_ct_additive=15
+30035,adder,adr-a,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.05
 30036,adder,adr-a,right_torso,,armorresist_rt_additive=8
 30037,adder,adr-a,right_arm,,armorresist_ra_additive=6;internalresist_ra_additive=6
 30038,adder,adr-a,left_leg,,internalresist_ll_additive=16
@@ -86,7 +86,7 @@ id,chassis,set,component,fixed_items,quirks
 30314,adder,adr-b,head,,
 30315,adder,adr-b,left_arm,,armorresist_la_additive=12;internalresist_la_additive=6
 30316,adder,adr-b,left_torso,,armorresist_lt_additive=8
-30317,adder,adr-b,centre_torso,,armorresist_ct_additive=15
+30317,adder,adr-b,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.05
 30318,adder,adr-b,right_torso,,armorresist_rt_additive=8
 30319,adder,adr-b,right_arm,,armorresist_ra_additive=6;internalresist_ra_additive=6
 30320,adder,adr-b,left_leg,,internalresist_ll_additive=16
@@ -94,7 +94,7 @@ id,chassis,set,component,fixed_items,quirks
 30817,adder,adr-cn,head,,
 30818,adder,adr-cn,left_arm,,armorresist_la_additive=6;internalresist_la_additive=6;laser_range_multiplier=0.025
 30819,adder,adr-cn,left_torso,,armorresist_lt_additive=8
-30820,adder,adr-cn,centre_torso,,armorresist_ct_additive=15
+30820,adder,adr-cn,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.05
 30821,adder,adr-cn,right_torso,,armorresist_rt_additive=8
 30822,adder,adr-cn,right_arm,,armorresist_ra_additive=6;internalresist_ra_additive=6;laser_range_multiplier=0.025
 30823,adder,adr-cn,left_leg,,internalresist_ll_additive=16
@@ -103,7 +103,7 @@ id,chassis,set,component,fixed_items,quirks
 30040,adder,adr-d,head,,
 30041,adder,adr-d,left_arm,,armorresist_la_additive=6;internalresist_la_additive=6
 30042,adder,adr-d,left_torso,,armorresist_lt_additive=8
-30043,adder,adr-d,centre_torso,,armorresist_ct_additive=15
+30043,adder,adr-d,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.05
 30044,adder,adr-d,right_torso,,armorresist_rt_additive=8
 30045,adder,adr-d,right_arm,,armorresist_ra_additive=12;internalresist_ra_additive=6
 30046,adder,adr-d,left_leg,,internalresist_ll_additive=16
@@ -111,12 +111,12 @@ id,chassis,set,component,fixed_items,quirks
 30024,adder,adr-prime,head,,
 30025,adder,adr-prime,left_arm,,armorresist_la_additive=6;internalresist_la_additive=6
 30026,adder,adr-prime,left_torso,,armorresist_lt_additive=12
-30027,adder,adr-prime,centre_torso,,armorresist_ct_additive=15
+30027,adder,adr-prime,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.05
 30028,adder,adr-prime,right_torso,,armorresist_rt_additive=12
 30029,adder,adr-prime,right_arm,,armorresist_ra_additive=6;internalresist_ra_additive=6
 30030,adder,adr-prime,left_leg,,internalresist_ll_additive=16
 30031,adder,adr-prime,right_leg,,internalresist_rl_additive=16
-31417,adder,adr-wl,centre_torso,,armorresist_ct_additive=15
+31417,adder,adr-wl,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.05
 31418,adder,adr-wl,left_torso,,armorresist_lt_additive=4
 31419,adder,adr-wl,left_arm,,armorresist_la_additive=6;internalresist_la_additive=6
 31420,adder,adr-wl,left_leg,,internalresist_ll_additive=16
@@ -155,7 +155,7 @@ id,chassis,set,component,fixed_items,quirks
 31313,bloodasp,bas-d,head,,
 31314,bloodasp,bas-d,left_arm,,armorresist_la_additive=8
 31315,bloodasp,bas-d,left_torso,,armorresist_lt_additive=7
-31316,bloodasp,bas-d,centre_torso,,
+31316,bloodasp,bas-d,centre_torso,,heatdissipation_multiplier=0.05
 31317,bloodasp,bas-d,right_torso,,
 31318,bloodasp,bas-d,right_arm,,armorresist_ra_additive=8
 31319,bloodasp,bas-d,left_leg,,
@@ -261,7 +261,7 @@ id,chassis,set,component,fixed_items,quirks
 30929,cougar,cou-ba,head,,
 30930,cougar,cou-ba,left_arm,,armorresist_la_additive=10
 30931,cougar,cou-ba,left_torso,,armorresist_lt_additive=12;internalresist_lt_additive=7
-30932,cougar,cou-ba,centre_torso,,armorresist_ct_additive=15
+30932,cougar,cou-ba,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.15
 30933,cougar,cou-ba,right_torso,,armorresist_rt_additive=12;internalresist_rt_additive=7
 30934,cougar,cou-ba,right_arm,,armorresist_ra_additive=10
 30935,cougar,cou-ba,left_leg,,internalresist_ll_additive=16
@@ -270,7 +270,7 @@ id,chassis,set,component,fixed_items,quirks
 30897,cougar,cou-c,head,,
 30898,cougar,cou-c,left_arm,,armorresist_la_additive=10
 30899,cougar,cou-c,left_torso,,armorresist_lt_additive=12;internalresist_lt_additive=7
-30900,cougar,cou-c,centre_torso,,armorresist_ct_additive=15
+30900,cougar,cou-c,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.15
 30901,cougar,cou-c,right_torso,,armorresist_rt_additive=12;internalresist_rt_additive=7
 30902,cougar,cou-c,right_arm,,armorresist_ra_additive=10
 30903,cougar,cou-c,left_leg,,internalresist_ll_additive=16
@@ -279,7 +279,7 @@ id,chassis,set,component,fixed_items,quirks
 30905,cougar,cou-d,head,,
 30906,cougar,cou-d,left_arm,,armorresist_la_additive=10
 30907,cougar,cou-d,left_torso,,armorresist_lt_additive=12;internalresist_lt_additive=7;missile_range_multiplier=0.05
-30908,cougar,cou-d,centre_torso,,armorresist_ct_additive=15
+30908,cougar,cou-d,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.15
 30909,cougar,cou-d,right_torso,,armorresist_rt_additive=12;internalresist_rt_additive=7;missile_range_multiplier=0.05
 30910,cougar,cou-d,right_arm,,armorresist_ra_additive=10
 30911,cougar,cou-d,left_leg,,internalresist_ll_additive=16
@@ -287,7 +287,7 @@ id,chassis,set,component,fixed_items,quirks
 30913,cougar,cou-e,head,,
 30914,cougar,cou-e,left_arm,,armorresist_la_additive=10
 30915,cougar,cou-e,left_torso,,armorresist_lt_additive=12;internalresist_lt_additive=7
-30916,cougar,cou-e,centre_torso,,armorresist_ct_additive=15
+30916,cougar,cou-e,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.15
 30917,cougar,cou-e,right_torso,,armorresist_rt_additive=12;internalresist_rt_additive=7
 30918,cougar,cou-e,right_arm,,armorresist_ra_additive=10
 30919,cougar,cou-e,left_leg,,internalresist_ll_additive=16
@@ -296,7 +296,7 @@ id,chassis,set,component,fixed_items,quirks
 31502,cougar,cou-f,head,,
 31503,cougar,cou-f,left_arm,,armorresist_la_additive=10
 31504,cougar,cou-f,left_torso,1504;1504;1504,armorresist_lt_additive=12;internalresist_lt_additive=7
-31505,cougar,cou-f,centre_torso,,armorresist_ct_additive=15
+31505,cougar,cou-f,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.15
 31506,cougar,cou-f,right_torso,1504;1504,armorresist_rt_additive=12;internalresist_rt_additive=7
 31507,cougar,cou-f,right_arm,,armorresist_ra_additive=10
 31508,cougar,cou-f,left_leg,,internalresist_ll_additive=16
@@ -305,7 +305,7 @@ id,chassis,set,component,fixed_items,quirks
 30921,cougar,cou-h,head,,
 30922,cougar,cou-h,left_arm,,armorresist_la_additive=10
 30923,cougar,cou-h,left_torso,1504;1504,armorresist_lt_additive=12;internalresist_lt_additive=7
-30924,cougar,cou-h,centre_torso,,armorresist_ct_additive=15
+30924,cougar,cou-h,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.15
 30925,cougar,cou-h,right_torso,1504;1504,armorresist_rt_additive=12;internalresist_rt_additive=7
 30926,cougar,cou-h,right_arm,,armorresist_ra_additive=10
 30927,cougar,cou-h,left_leg,,internalresist_ll_additive=16
@@ -313,7 +313,7 @@ id,chassis,set,component,fixed_items,quirks
 30889,cougar,cou-prime,head,,all_range_multiplier=0.05
 30890,cougar,cou-prime,left_arm,,armorresist_la_additive=10
 30891,cougar,cou-prime,left_torso,,armorresist_lt_additive=12;internalresist_lt_additive=7;missile_range_multiplier=0.05
-30892,cougar,cou-prime,centre_torso,,armorresist_ct_additive=15
+30892,cougar,cou-prime,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.15
 30893,cougar,cou-prime,right_torso,,armorresist_rt_additive=12;internalresist_rt_additive=7;missile_range_multiplier=0.05
 30894,cougar,cou-prime,right_arm,,armorresist_ra_additive=10;energy_range_multiplier=0.05
 30895,cougar,cou-prime,left_leg,,internalresist_ll_additive=16
@@ -522,7 +522,7 @@ id,chassis,set,component,fixed_items,quirks
 31568,firemoth,fmt-al,head,,
 31569,firemoth,fmt-al,left_arm,,armorresist_la_additive=18
 31570,firemoth,fmt-al,left_torso,,
-31571,firemoth,fmt-al,centre_torso,,
+31571,firemoth,fmt-al,centre_torso,,heatdissipation_multiplier=0.075
 31572,firemoth,fmt-al,right_torso,,all_range_multiplier=0.075
 31573,firemoth,fmt-al,right_arm,,armorresist_ra_additive=18;energy_range_multiplier=0.05
 31574,firemoth,fmt-al,left_leg,,
@@ -530,7 +530,7 @@ id,chassis,set,component,fixed_items,quirks
 31528,firemoth,fmt-b,head,,
 31529,firemoth,fmt-b,left_arm,,armorresist_la_additive=18;energy_range_multiplier=0.05
 31530,firemoth,fmt-b,left_torso,,
-31531,firemoth,fmt-b,centre_torso,,
+31531,firemoth,fmt-b,centre_torso,,heatdissipation_multiplier=0.075
 31532,firemoth,fmt-b,right_torso,,
 31533,firemoth,fmt-b,right_arm,,armorresist_ra_additive=18
 31534,firemoth,fmt-b,left_leg,,
@@ -539,7 +539,7 @@ id,chassis,set,component,fixed_items,quirks
 31536,firemoth,fmt-c,head,,
 31537,firemoth,fmt-c,left_arm,,armorresist_la_additive=18
 31538,firemoth,fmt-c,left_torso,,
-31539,firemoth,fmt-c,centre_torso,,
+31539,firemoth,fmt-c,centre_torso,,heatdissipation_multiplier=0.075
 31540,firemoth,fmt-c,right_torso,,
 31541,firemoth,fmt-c,right_arm,,armorresist_ra_additive=18
 31542,firemoth,fmt-c,left_leg,,
@@ -548,7 +548,7 @@ id,chassis,set,component,fixed_items,quirks
 31544,firemoth,fmt-d,head,,
 31545,firemoth,fmt-d,left_arm,,armorresist_la_additive=18
 31546,firemoth,fmt-d,left_torso,,
-31547,firemoth,fmt-d,centre_torso,,
+31547,firemoth,fmt-d,centre_torso,,heatdissipation_multiplier=0.075
 31548,firemoth,fmt-d,right_torso,,
 31549,firemoth,fmt-d,right_arm,,armorresist_ra_additive=18
 31550,firemoth,fmt-d,left_leg,,
@@ -557,7 +557,7 @@ id,chassis,set,component,fixed_items,quirks
 31552,firemoth,fmt-h,head,,
 31553,firemoth,fmt-h,left_arm,,armorresist_la_additive=18
 31554,firemoth,fmt-h,left_torso,,
-31555,firemoth,fmt-h,centre_torso,,
+31555,firemoth,fmt-h,centre_torso,,heatdissipation_multiplier=0.075
 31556,firemoth,fmt-h,right_torso,,
 31557,firemoth,fmt-h,right_arm,,armorresist_ra_additive=18
 31558,firemoth,fmt-h,left_leg,,
@@ -565,7 +565,7 @@ id,chassis,set,component,fixed_items,quirks
 31560,firemoth,fmt-k,head,,
 31561,firemoth,fmt-k,left_arm,,armorresist_la_additive=18
 31562,firemoth,fmt-k,left_torso,,all_range_multiplier=0.05
-31563,firemoth,fmt-k,centre_torso,,
+31563,firemoth,fmt-k,centre_torso,,heatdissipation_multiplier=0.075
 31564,firemoth,fmt-k,right_torso,,
 31565,firemoth,fmt-k,right_arm,,armorresist_ra_additive=18
 31566,firemoth,fmt-k,left_leg,,
@@ -574,7 +574,7 @@ id,chassis,set,component,fixed_items,quirks
 31520,firemoth,fmt-prime,head,,
 31521,firemoth,fmt-prime,left_arm,,armorresist_la_additive=18
 31522,firemoth,fmt-prime,left_torso,,
-31523,firemoth,fmt-prime,centre_torso,,
+31523,firemoth,fmt-prime,centre_torso,,heatdissipation_multiplier=0.075
 31524,firemoth,fmt-prime,right_torso,,
 31525,firemoth,fmt-prime,right_arm,,armorresist_ra_additive=18
 31526,firemoth,fmt-prime,left_leg,,
@@ -649,8 +649,8 @@ id,chassis,set,component,fixed_items,quirks
 31592,gauntlet,gtl-1o,head,,
 31593,gauntlet,gtl-1o,left_arm,,armorresist_la_additive=20
 31594,gauntlet,gtl-1o,left_torso,,armorresist_lt_additive=15
-31595,gauntlet,gtl-1o,centre_torso,,armorresist_ct_additive=15
-31596,gauntlet,gtl-1o,right_torso,,armorresist_rt_additive=10
+31595,gauntlet,gtl-1o,centre_torso,,armorresist_ct_additive=15;heatdissipation_multiplier=0.1
+31596,gauntlet,gtl-1o,right_torso,,armorresist_rt_additive=10;heatdissipation_multiplier=0.075
 31597,gauntlet,gtl-1o,right_arm,,armorresist_ra_additive=20
 31598,gauntlet,gtl-1o,left_leg,,armorresist_ll_additive=8
 31599,gauntlet,gtl-1o,right_leg,,armorresist_rl_additive=8
@@ -658,7 +658,7 @@ id,chassis,set,component,fixed_items,quirks
 31600,gauntlet,gtl-1oa,head,,
 31601,gauntlet,gtl-1oa,left_arm,,armorresist_la_additive=20
 31602,gauntlet,gtl-1oa,left_torso,,armorresist_lt_additive=10
-31603,gauntlet,gtl-1oa,centre_torso,,armorresist_ct_additive=30
+31603,gauntlet,gtl-1oa,centre_torso,,armorresist_ct_additive=30;heatdissipation_multiplier=0.1
 31604,gauntlet,gtl-1oa,right_torso,,armorresist_rt_additive=10
 31605,gauntlet,gtl-1oa,right_arm,,armorresist_ra_additive=20
 31606,gauntlet,gtl-1oa,left_leg,,armorresist_ll_additive=8
@@ -666,7 +666,7 @@ id,chassis,set,component,fixed_items,quirks
 31608,gauntlet,gtl-1ob,head,,
 31609,gauntlet,gtl-1ob,left_arm,,armorresist_la_additive=10;internalresist_la_additive=5
 31610,gauntlet,gtl-1ob,left_torso,,armorresist_lt_additive=15
-31611,gauntlet,gtl-1ob,centre_torso,1503,armorresist_ct_additive=20
+31611,gauntlet,gtl-1ob,centre_torso,1503,armorresist_ct_additive=20;heatdissipation_multiplier=0.1
 31612,gauntlet,gtl-1ob,right_torso,,
 31613,gauntlet,gtl-1ob,right_arm,,armorresist_ra_additive=10;internalresist_ra_additive=5
 31614,gauntlet,gtl-1ob,left_leg,1503;1503,
@@ -674,8 +674,8 @@ id,chassis,set,component,fixed_items,quirks
 31616,gauntlet,gtl-1oc,head,,
 31617,gauntlet,gtl-1oc,left_arm,,armorresist_la_additive=20
 31618,gauntlet,gtl-1oc,left_torso,,armorresist_lt_additive=15
-31619,gauntlet,gtl-1oc,centre_torso,,armorresist_ct_additive=30
-31620,gauntlet,gtl-1oc,right_torso,,armorresist_rt_additive=10
+31619,gauntlet,gtl-1oc,centre_torso,,armorresist_ct_additive=30;heatdissipation_multiplier=0.1
+31620,gauntlet,gtl-1oc,right_torso,,armorresist_rt_additive=10;heatdissipation_multiplier=0.075
 31621,gauntlet,gtl-1oc,right_arm,,armorresist_ra_additive=20
 31622,gauntlet,gtl-1oc,left_leg,,armorresist_ll_additive=8
 31623,gauntlet,gtl-1oc,right_leg,,armorresist_rl_additive=8
@@ -742,7 +742,7 @@ id,chassis,set,component,fixed_items,quirks
 30712,huntsman,hmn-a,head,,
 30713,huntsman,hmn-a,left_arm,,armorresist_la_additive=9
 30714,huntsman,hmn-a,left_torso,,armorresist_lt_additive=5
-30715,huntsman,hmn-a,centre_torso,,armorresist_ct_additive=5
+30715,huntsman,hmn-a,centre_torso,,armorresist_ct_additive=5;heatdissipation_multiplier=0.1
 30716,huntsman,hmn-a,right_torso,,armorresist_rt_additive=5
 30717,huntsman,hmn-a,right_arm,,armorresist_ra_additive=9
 30718,huntsman,hmn-a,left_leg,,armorresist_ll_additive=6
@@ -751,7 +751,7 @@ id,chassis,set,component,fixed_items,quirks
 30720,huntsman,hmn-b,head,,
 30721,huntsman,hmn-b,left_arm,,armorresist_la_additive=12
 30722,huntsman,hmn-b,left_torso,,all_range_multiplier=0.05;armorresist_lt_additive=5
-30723,huntsman,hmn-b,centre_torso,,armorresist_ct_additive=5
+30723,huntsman,hmn-b,centre_torso,,armorresist_ct_additive=5;heatdissipation_multiplier=0.1
 30724,huntsman,hmn-b,right_torso,,armorresist_rt_additive=5
 30725,huntsman,hmn-b,right_arm,,
 30726,huntsman,hmn-b,left_leg,,armorresist_ll_additive=6
@@ -759,7 +759,7 @@ id,chassis,set,component,fixed_items,quirks
 30728,huntsman,hmn-c,head,,
 30729,huntsman,hmn-c,left_arm,,armorresist_la_additive=12
 30730,huntsman,hmn-c,left_torso,,armorresist_lt_additive=5
-30731,huntsman,hmn-c,centre_torso,,armorresist_ct_additive=5
+30731,huntsman,hmn-c,centre_torso,,armorresist_ct_additive=5;heatdissipation_multiplier=0.1
 30732,huntsman,hmn-c,right_torso,,armorresist_rt_additive=5
 30733,huntsman,hmn-c,right_arm,,armorresist_ra_additive=12
 30734,huntsman,hmn-c,left_leg,,armorresist_ll_additive=6
@@ -767,7 +767,7 @@ id,chassis,set,component,fixed_items,quirks
 31665,huntsman,hmn-h,head,,
 31666,huntsman,hmn-h,left_arm,,
 31667,huntsman,hmn-h,left_torso,,armorresist_lt_additive=5
-31668,huntsman,hmn-h,centre_torso,,armorresist_ct_additive=5
+31668,huntsman,hmn-h,centre_torso,,armorresist_ct_additive=5;heatdissipation_multiplier=0.1
 31669,huntsman,hmn-h,right_torso,,armorresist_rt_additive=5
 31670,huntsman,hmn-h,right_arm,,
 31671,huntsman,hmn-h,left_leg,,armorresist_ll_additive=6
@@ -775,7 +775,7 @@ id,chassis,set,component,fixed_items,quirks
 30736,huntsman,hmn-p,head,,
 30737,huntsman,hmn-p,left_arm,,armorresist_la_additive=5
 30738,huntsman,hmn-p,left_torso,,armorresist_lt_additive=5;ballistic_range_multiplier=0.05
-30739,huntsman,hmn-p,centre_torso,,armorresist_ct_additive=5
+30739,huntsman,hmn-p,centre_torso,,armorresist_ct_additive=5;heatdissipation_multiplier=0.1
 30740,huntsman,hmn-p,right_torso,,armorresist_rt_additive=5
 30741,huntsman,hmn-p,right_arm,,armorresist_ra_additive=5
 30742,huntsman,hmn-p,left_leg,,armorresist_ll_additive=6
@@ -784,7 +784,7 @@ id,chassis,set,component,fixed_items,quirks
 30744,huntsman,hmn-pa,head,,
 30745,huntsman,hmn-pa,left_arm,,armorresist_la_additive=9
 30746,huntsman,hmn-pa,left_torso,,armorresist_lt_additive=5
-30747,huntsman,hmn-pa,centre_torso,,armorresist_ct_additive=5
+30747,huntsman,hmn-pa,centre_torso,,armorresist_ct_additive=5;heatdissipation_multiplier=0.1
 30748,huntsman,hmn-pa,right_torso,,armorresist_rt_additive=5
 30749,huntsman,hmn-pa,right_arm,,
 30750,huntsman,hmn-pa,left_leg,,armorresist_ll_additive=6
@@ -792,7 +792,7 @@ id,chassis,set,component,fixed_items,quirks
 30704,huntsman,hmn-prime,head,,
 30705,huntsman,hmn-prime,left_arm,,
 30706,huntsman,hmn-prime,left_torso,,armorresist_lt_additive=5
-30707,huntsman,hmn-prime,centre_torso,,armorresist_ct_additive=5
+30707,huntsman,hmn-prime,centre_torso,,armorresist_ct_additive=5;heatdissipation_multiplier=0.1
 30708,huntsman,hmn-prime,right_torso,,armorresist_rt_additive=5
 30709,huntsman,hmn-prime,right_arm,,
 30710,huntsman,hmn-prime,left_leg,,armorresist_ll_additive=6
@@ -800,7 +800,7 @@ id,chassis,set,component,fixed_items,quirks
 30226,iceferret,ifr-a,head,,
 30227,iceferret,ifr-a,left_arm,,armorresist_la_additive=21
 30228,iceferret,ifr-a,left_torso,,internalresist_lt_additive=11
-30229,iceferret,ifr-a,centre_torso,,internalresist_ct_additive=13
+30229,iceferret,ifr-a,centre_torso,,heatdissipation_multiplier=0.05;internalresist_ct_additive=13
 30230,iceferret,ifr-a,right_torso,,internalresist_rt_additive=11
 30231,iceferret,ifr-a,right_arm,,armorresist_ra_additive=20
 30232,iceferret,ifr-a,left_leg,,internalresist_ll_additive=11
@@ -808,7 +808,7 @@ id,chassis,set,component,fixed_items,quirks
 30424,iceferret,ifr-b,head,,
 30425,iceferret,ifr-b,left_arm,,armorresist_la_additive=20
 30426,iceferret,ifr-b,left_torso,,internalresist_lt_additive=11
-30427,iceferret,ifr-b,centre_torso,,internalresist_ct_additive=13
+30427,iceferret,ifr-b,centre_torso,,heatdissipation_multiplier=0.05;internalresist_ct_additive=13
 30428,iceferret,ifr-b,right_torso,,internalresist_rt_additive=11
 30429,iceferret,ifr-b,right_arm,,armorresist_ra_additive=20
 30430,iceferret,ifr-b,left_leg,,internalresist_ll_additive=11
@@ -816,7 +816,7 @@ id,chassis,set,component,fixed_items,quirks
 30234,iceferret,ifr-c,head,,
 30235,iceferret,ifr-c,left_arm,,armorresist_la_additive=20
 30236,iceferret,ifr-c,left_torso,,internalresist_lt_additive=11
-30237,iceferret,ifr-c,centre_torso,,internalresist_ct_additive=13
+30237,iceferret,ifr-c,centre_torso,,heatdissipation_multiplier=0.05;internalresist_ct_additive=13
 30238,iceferret,ifr-c,right_torso,,internalresist_rt_additive=11
 30239,iceferret,ifr-c,right_arm,,armorresist_ra_additive=20
 30240,iceferret,ifr-c,left_leg,,internalresist_ll_additive=11
@@ -824,7 +824,7 @@ id,chassis,set,component,fixed_items,quirks
 30338,iceferret,ifr-d,head,,
 30339,iceferret,ifr-d,left_arm,,armorresist_la_additive=20;clanantimissilesystem_range_multiplier=0.1
 30340,iceferret,ifr-d,left_torso,,internalresist_lt_additive=11
-30341,iceferret,ifr-d,centre_torso,,internalresist_ct_additive=13
+30341,iceferret,ifr-d,centre_torso,,heatdissipation_multiplier=0.05;internalresist_ct_additive=13
 30342,iceferret,ifr-d,right_torso,,internalresist_rt_additive=11
 30343,iceferret,ifr-d,right_arm,,armorresist_ra_additive=20
 30344,iceferret,ifr-d,left_leg,,internalresist_ll_additive=11
@@ -842,7 +842,7 @@ id,chassis,set,component,fixed_items,quirks
 31025,iceferret,ifr-p,head,,
 31026,iceferret,ifr-p,left_arm,,armorresist_la_additive=20
 31027,iceferret,ifr-p,left_torso,,internalresist_lt_additive=11
-31028,iceferret,ifr-p,centre_torso,,internalresist_ct_additive=13
+31028,iceferret,ifr-p,centre_torso,,heatdissipation_multiplier=0.05;internalresist_ct_additive=13
 31029,iceferret,ifr-p,right_torso,,internalresist_rt_additive=11
 31030,iceferret,ifr-p,right_arm,,armorresist_ra_additive=20
 31031,iceferret,ifr-p,left_leg,,internalresist_ll_additive=11
@@ -850,7 +850,7 @@ id,chassis,set,component,fixed_items,quirks
 30218,iceferret,ifr-prime,head,,
 30219,iceferret,ifr-prime,left_arm,,armorresist_la_additive=20
 30220,iceferret,ifr-prime,left_torso,,internalresist_lt_additive=11
-30221,iceferret,ifr-prime,centre_torso,,internalresist_ct_additive=13
+30221,iceferret,ifr-prime,centre_torso,,heatdissipation_multiplier=0.1;internalresist_ct_additive=13
 30222,iceferret,ifr-prime,right_torso,,armorresist_rt_additive=11
 30223,iceferret,ifr-prime,right_arm,,armorresist_ra_additive=20
 30224,iceferret,ifr-prime,left_leg,,internalresist_ll_additive=11
@@ -859,7 +859,7 @@ id,chassis,set,component,fixed_items,quirks
 30953,iceferret,ifr-rc,head,,
 30954,iceferret,ifr-rc,left_arm,,armorresist_la_additive=20
 30955,iceferret,ifr-rc,left_torso,,internalresist_lt_additive=11
-30956,iceferret,ifr-rc,centre_torso,,internalresist_ct_additive=13
+30956,iceferret,ifr-rc,centre_torso,,heatdissipation_multiplier=0.05;internalresist_ct_additive=13
 30957,iceferret,ifr-rc,right_torso,,internalresist_rt_additive=11
 30958,iceferret,ifr-rc,right_arm,,armorresist_ra_additive=20
 30959,iceferret,ifr-rc,left_leg,,internalresist_ll_additive=11
@@ -869,7 +869,7 @@ id,chassis,set,component,fixed_items,quirks
 30346,kitfox,kfx-c,head,,
 30347,kitfox,kfx-c,left_arm,,armorresist_la_additive=20
 30348,kitfox,kfx-c,left_torso,,all_range_multiplier=0.05;internalresist_lt_additive=15
-30349,kitfox,kfx-c,centre_torso,,internalresist_ct_additive=15
+30349,kitfox,kfx-c,centre_torso,,heatdissipation_multiplier=0.075;internalresist_ct_additive=15
 30350,kitfox,kfx-c,right_torso,,all_range_multiplier=0.05;internalresist_rt_additive=15
 30351,kitfox,kfx-c,left_leg,,internalresist_ll_additive=14
 30352,kitfox,kfx-c,right_leg,,internalresist_rl_additive=14
@@ -877,7 +877,7 @@ id,chassis,set,component,fixed_items,quirks
 30080,kitfox,kfx-d,head,,
 30081,kitfox,kfx-d,left_arm,,armorresist_la_additive=20
 30082,kitfox,kfx-d,left_torso,,all_range_multiplier=0.05;internalresist_lt_additive=15
-30083,kitfox,kfx-d,centre_torso,,internalresist_ct_additive=15
+30083,kitfox,kfx-d,centre_torso,,heatdissipation_multiplier=0.075;internalresist_ct_additive=15
 30084,kitfox,kfx-d,right_torso,,all_range_multiplier=0.05;internalresist_rt_additive=15
 30085,kitfox,kfx-d,right_arm,,armorresist_ra_additive=20
 30086,kitfox,kfx-d,left_leg,,internalresist_ll_additive=14
@@ -885,7 +885,7 @@ id,chassis,set,component,fixed_items,quirks
 31153,kitfox,kfx-g,head,,
 31154,kitfox,kfx-g,left_arm,,armorresist_la_additive=20;tag_range_multiplier=0.25
 31155,kitfox,kfx-g,left_torso,,internalresist_lt_additive=10
-31156,kitfox,kfx-g,centre_torso,,internalresist_ct_additive=15
+31156,kitfox,kfx-g,centre_torso,,heatdissipation_multiplier=0.075;internalresist_ct_additive=15
 31157,kitfox,kfx-g,right_torso,,internalresist_rt_additive=10
 31158,kitfox,kfx-g,right_arm,,armorresist_ra_additive=20
 31159,kitfox,kfx-g,left_leg,,internalresist_ll_additive=14
@@ -893,7 +893,7 @@ id,chassis,set,component,fixed_items,quirks
 31385,kitfox,kfx-p,head,,
 31386,kitfox,kfx-p,left_arm,,armorresist_la_additive=20
 31387,kitfox,kfx-p,left_torso,,internalresist_lt_additive=10
-31388,kitfox,kfx-p,centre_torso,,internalresist_ct_additive=15
+31388,kitfox,kfx-p,centre_torso,,heatdissipation_multiplier=0.075;internalresist_ct_additive=15
 31389,kitfox,kfx-p,right_torso,,internalresist_rt_additive=10
 31390,kitfox,kfx-p,right_arm,,armorresist_ra_additive=20
 31391,kitfox,kfx-p,left_leg,,internalresist_ll_additive=14
@@ -902,7 +902,7 @@ id,chassis,set,component,fixed_items,quirks
 30809,kitfox,kfx-pr,head,,
 30810,kitfox,kfx-pr,left_arm,,armorresist_la_additive=20;clanmachinegun_range_multiplier=0.05
 30811,kitfox,kfx-pr,left_torso,,internalresist_lt_additive=6
-30812,kitfox,kfx-pr,centre_torso,,internalresist_ct_additive=15
+30812,kitfox,kfx-pr,centre_torso,,heatdissipation_multiplier=0.075;internalresist_ct_additive=15
 30813,kitfox,kfx-pr,right_torso,,internalresist_rt_additive=6
 30814,kitfox,kfx-pr,right_arm,,armorresist_ra_additive=20;ballistic_range_multiplier=0.1;clanmachinegun_range_multiplier=0.05
 30815,kitfox,kfx-pr,left_leg,,internalresist_ll_additive=14
@@ -911,7 +911,7 @@ id,chassis,set,component,fixed_items,quirks
 30072,kitfox,kfx-prime,head,,
 30073,kitfox,kfx-prime,left_arm,,armorresist_la_additive=20
 30074,kitfox,kfx-prime,left_torso,,all_range_multiplier=0.05;internalresist_lt_additive=15
-30075,kitfox,kfx-prime,centre_torso,,internalresist_ct_additive=15
+30075,kitfox,kfx-prime,centre_torso,,heatdissipation_multiplier=0.075;internalresist_ct_additive=15
 30076,kitfox,kfx-prime,right_torso,,all_range_multiplier=0.05;internalresist_rt_additive=15
 30077,kitfox,kfx-prime,right_arm,,armorresist_ra_additive=20;ballistic_range_multiplier=0.1
 30078,kitfox,kfx-prime,left_leg,,internalresist_ll_additive=14
@@ -920,7 +920,7 @@ id,chassis,set,component,fixed_items,quirks
 30088,kitfox,kfx-s,head,,
 30089,kitfox,kfx-s,left_arm,,armorresist_la_additive=20
 30090,kitfox,kfx-s,left_torso,1504,internalresist_lt_additive=10
-30091,kitfox,kfx-s,centre_torso,,internalresist_ct_additive=15
+30091,kitfox,kfx-s,centre_torso,,heatdissipation_multiplier=0.075;internalresist_ct_additive=15
 30092,kitfox,kfx-s,right_torso,1504,internalresist_rt_additive=10
 30093,kitfox,kfx-s,right_arm,,armorresist_ra_additive=20
 30094,kitfox,kfx-s,left_leg,1504;1504,internalresist_ll_additive=7
@@ -1278,7 +1278,7 @@ id,chassis,set,component,fixed_items,quirks
 30688,nightgyr,ntg-d,head,,
 30689,nightgyr,ntg-d,left_arm,,
 30690,nightgyr,ntg-d,left_torso,,
-30691,nightgyr,ntg-d,centre_torso,,
+30691,nightgyr,ntg-d,centre_torso,,heatdissipation_multiplier=0.05
 30692,nightgyr,ntg-d,right_torso,,
 30693,nightgyr,ntg-d,right_arm,,
 30694,nightgyr,ntg-d,left_leg,,
@@ -1637,7 +1637,7 @@ id,chassis,set,component,fixed_items,quirks
 30768,summoner,smn-ml,head,,
 30769,summoner,smn-ml,left_arm,,armorresist_la_additive=15
 30770,summoner,smn-ml,left_torso,,
-30771,summoner,smn-ml,centre_torso,,critchance_receiving_multiplier=-0.2
+30771,summoner,smn-ml,centre_torso,,critchance_receiving_multiplier=-0.2;heatdissipation_multiplier=0.15
 30772,summoner,smn-ml,right_torso,,energy_range_multiplier=0.05
 30773,summoner,smn-ml,right_arm,,armorresist_ra_additive=15
 30774,summoner,smn-ml,left_leg,,
@@ -1788,7 +1788,7 @@ id,chassis,set,component,fixed_items,quirks
 31767,timberwolf,tbr-m,left_leg,,
 31768,timberwolf,tbr-m,right_leg,,
 31673,timberwolf,tbr-n,head,,
-31674,timberwolf,tbr-n,centre_torso,,armorresist_ct_additive=4;ballistic_range_multiplier=0.15
+31674,timberwolf,tbr-n,centre_torso,,armorresist_ct_additive=4;ballistic_range_multiplier=0.15;heatdissipation_multiplier=0.05
 31675,timberwolf,tbr-n,left_torso,,armorresist_lt_additive=8
 31676,timberwolf,tbr-n,left_leg,,
 31677,timberwolf,tbr-n,right_torso,,armorresist_rt_additive=8
@@ -1798,7 +1798,7 @@ id,chassis,set,component,fixed_items,quirks
 30000,timberwolf,tbr-prime,head,,
 30001,timberwolf,tbr-prime,left_arm,,
 30002,timberwolf,tbr-prime,left_torso,,armorresist_lt_additive=8
-30003,timberwolf,tbr-prime,centre_torso,,armorresist_ct_additive=4;ballistic_range_multiplier=0.15
+30003,timberwolf,tbr-prime,centre_torso,,armorresist_ct_additive=4;ballistic_range_multiplier=0.15;heatdissipation_multiplier=0.05
 30004,timberwolf,tbr-prime,right_torso,,armorresist_rt_additive=8
 30005,timberwolf,tbr-prime,right_arm,,
 30006,timberwolf,tbr-prime,left_leg,,
@@ -1816,7 +1816,7 @@ id,chassis,set,component,fixed_items,quirks
 30785,timberwolf,tbr-war,head,,
 30786,timberwolf,tbr-war,left_arm,,
 30787,timberwolf,tbr-war,left_torso,,armorresist_lt_additive=8
-30788,timberwolf,tbr-war,centre_torso,,armorresist_ct_additive=4
+30788,timberwolf,tbr-war,centre_torso,,armorresist_ct_additive=4;heatdissipation_multiplier=0.05
 30789,timberwolf,tbr-war,right_torso,,armorresist_rt_additive=8
 30790,timberwolf,tbr-war,right_arm,,
 30791,timberwolf,tbr-war,left_leg,,

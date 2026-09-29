@@ -1,0 +1,5 @@
+upgrade_id,item_id,name,abbreviation,dissipation,engine_dissipation,capacity,engine_capacity
+3002,3001,DoubleHeatSinkType,DHS,0.22,0.22,0.5,2
+3003,3000,StandardHeatSinkType,SHS,0.15,0.18,0.85,2.25
+3005,3004,ClanDoubleHeatSinkType,DHS,0.2,0.2,0.5,2
+3006,3000,ClanStandardHeatSinkType,SHS,0.15,0.18,0.85,2.25

@@ -29,13 +29,33 @@ LOCALES_DIR = SCRIPT_DIR / "locales"
 DATA_DIR = SCRIPT_DIR / "data"
 # toutes les tables CSV vivent dans data/ (avant la 1.6 : a cote du script)
 DATA_FILES = ("mechs.csv", "weapons.csv", "equipment.csv", "engines.csv", "omnipods.csv",
-              "weapon_ranges.csv", "targeting_computers.csv", "build_registry.csv")
+              "weapon_ranges.csv", "targeting_computers.csv", "heatsinks.csv",
+              "build_registry.csv")
 INVALID_CHARS = re.compile(r'[<>:"/\\|?*]')
 MAX_WEAPON_TYPES = 3
 MWO_STEAM_APPID = "342200"
 WEIGHT_CLASSES = ((35, "Light"), (55, "Medium"), (75, "Heavy"), (100, "Assault"))
 ENGINE_MODES = ("all", "type", "none")
 DEFAULT_STRUCTURE_MODIFIER = 0.5
+# Capacite de chaleur de base d'un mech : codee dans le moteur du jeu, elle
+# n'apparait nulle part dans GameData.pak (les refroidisseurs s'y ajoutent).
+BASE_HEAT_CAPACITY = 30.0
+# Tout moteur fournit gratuitement jusqu'a 10 refroidisseurs internes ; au-dela
+# de 250 de puissance il garde des emplacements internes en plus, a remplir.
+FREE_ENGINE_HEATSINKS = 10
+
+# Blocs du nom, dans l'ordre par defaut (option name_order du cfg). Deux blocs
+# voisins de NAME_CHAIN_BLOCKS sont joints par "-", les autres par une espace.
+NAME_BLOCKS = ("prefix", "variant", "original", "weapons", "equipment", "heatsink", "engine")
+NAME_CHAIN_BLOCKS = ("weapons", "equipment")
+# Colonnes connues de l'export CSV, dans l'ordre par defaut (option csv_columns
+# du cfg) : identite, chassis, moteur, armement, chaleur, PV, puis provenance.
+EXPORT_CSV_COLUMNS = ("name", "mechvariant", "class", "tonnage", "tech", "buildcode",
+                      "engine_type", "engine_rating", "max_speed",
+                      "weapons", "equipment", "jumpjets",
+                      "heatsink_type", "heatsinks", "heat_dissipation", "max_heat",
+                      "optimal_range", "leg_hp", "kill_hp", "total_hp",
+                      "owner", "date")
 PROJECT_URL = "https://github.com/SHDMk2/mwobuildmanager"
 REGISTRY_PATH = DATA_DIR / "build_registry.csv"
 
@@ -133,6 +153,33 @@ class Translator:
 # ---------------------------------------------------------------------------
 # Config
 
+# Options ecrites dans config.cfg quand elles manquent, pour que le fichier
+# montre tous les reglages disponibles. "language" en est absent : il est
+# demande au premier lancement.
+CONFIG_DEFAULTS = {
+    "general": {
+        "game_dir": "",
+        "game_install_dir": "",
+        "backup_before_rename": "true",
+        "structure_modifier": f"{DEFAULT_STRUCTURE_MODIFIER:g}",
+        "dhs_rename": "false",
+        "name_order": ",".join(NAME_BLOCKS),
+        "csv_columns": ",".join(EXPORT_CSV_COLUMNS),
+    },
+    "last_used": {
+        "add_prefix": "false",
+        "prefix": "",
+        "add_suffix": "true",
+        "add_equipment": "false",
+        "engine_mode": "none",
+        "keep_original": "true",
+        "source_dir": "",
+        "import_dir": "",
+        "export_dir": "",
+    },
+}
+
+
 def load_config():
     cfg = configparser.ConfigParser()
     if CONFIG_PATH.exists():
@@ -147,6 +194,66 @@ def load_config():
 def save_config(cfg):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         cfg.write(f)
+
+
+def apply_config_defaults(cfg):
+    """Complete config.cfg avec les options manquantes (voir CONFIG_DEFAULTS) et
+    renvoie le nombre de lignes ajoutees. Une option deja presente, meme vide,
+    n'est jamais touchee."""
+    added = 0
+    for section, defaults in CONFIG_DEFAULTS.items():
+        if section not in cfg:
+            cfg[section] = {}
+        for key, value in defaults.items():
+            if key not in cfg[section]:
+                cfg[section][key] = value
+                added += 1
+    if added:
+        save_config(cfg)
+    return added
+
+
+def bool_option(cfg, key, default):
+    """getboolean tolerant : une valeur illisible retombe sur le defaut."""
+    try:
+        return cfg["general"].getboolean(key, fallback=default)
+    except ValueError:
+        return default
+
+
+def list_option(cfg, key, allowed, default):
+    """Option "a,b,c" du cfg -> (liste retenue, noms inconnus ignores).
+    Liste vide ou illisible = ordre par defaut."""
+    kept, unknown = [], []
+    for name in re.split(r"[,;]", cfg["general"].get(key, "")):
+        name = name.strip().lower()
+        if not name:
+            continue
+        if name not in allowed:
+            if name not in unknown:
+                unknown.append(name)
+        elif name not in kept:
+            kept.append(name)
+    return (kept or list(default)), unknown
+
+
+def naming_options(cfg):
+    """Reglages de nommage venant de [general], ajoutes aux options de renommage."""
+    order, _unknown = list_option(cfg, "name_order", NAME_BLOCKS, NAME_BLOCKS)
+    return {"name_order": order, "dhs_rename": bool_option(cfg, "dhs_rename", False)}
+
+
+def csv_columns(cfg):
+    columns, _unknown = list_option(cfg, "csv_columns", EXPORT_CSV_COLUMNS, EXPORT_CSV_COLUMNS)
+    return columns
+
+
+def warn_unknown_options(cfg, t):
+    for key, allowed in (("name_order", NAME_BLOCKS), ("csv_columns", EXPORT_CSV_COLUMNS)):
+        _kept, unknown = list_option(cfg, key, allowed, ())
+        if unknown:
+            print(t("option_unknown_values", option=key, values=", ".join(unknown),
+                    known=", ".join(allowed)))
 
 
 # ---------------------------------------------------------------------------
@@ -175,12 +282,15 @@ def read_csv_rows(path):
 
 
 def load_engines(path):
-    """id -> (type, rating), ex. "3558" -> ("LFE", "300"), plus les ids des XL
-    Inner Sphere (seuls moteurs qui meurent a la perte d'un side torso)."""
+    """id -> (type, rating, refroidisseurs internes), ex. "3558" -> ("LFE",
+    "300", 12), plus les ids des XL Inner Sphere (seuls moteurs qui meurent a la
+    perte d'un side torso). La colonne internal_heatsinks manque dans un
+    engines.csv d'avant la 1.7 : elle compte alors pour 0."""
     engines = {}
     is_xl = set()
     for row in read_csv_rows(path):
-        engines[row["id"]] = (row["type"].strip(), row["rating"].strip())
+        engines[row["id"]] = (row["type"].strip(), row["rating"].strip(),
+                              _to_int(row.get("internal_heatsinks")) or 0)
         if row.get("name", "").startswith("Engine_XL_"):
             is_xl.add(row["id"])
     return engines, is_xl
@@ -257,6 +367,23 @@ def load_omnipods(path):
     return pods, set_bonuses
 
 
+def load_heatsinks(path):
+    """id du type de refroidisseur (balise <Upgrades><HeatSinks>) -> stats du
+    refroidisseur correspondant : abreviation (SHS / DHS), dissipation et
+    capacite de chaleur, en version interne au moteur ou externe."""
+    sinks = {}
+    for row in read_csv_rows(path):
+        sinks[row["upgrade_id"]] = {
+            "item": row.get("item_id", "").strip(),
+            "abbr": row.get("abbreviation", "").strip(),
+            "dissipation": _to_float(row.get("dissipation")) or 0.0,
+            "engine_dissipation": _to_float(row.get("engine_dissipation")) or 0.0,
+            "capacity": _to_float(row.get("capacity")) or 0.0,
+            "engine_capacity": _to_float(row.get("engine_capacity")) or 0.0,
+        }
+    return sinks
+
+
 def load_weapon_ranges(path):
     """id -> (nom interne, portee optimale, familles pour les quirks)."""
     return {row["id"]: (row["name"], _to_float(row.get("optimal_range")),
@@ -287,6 +414,7 @@ def load_gamedata():
         "mech_specs": load_mech_specs(DATA_DIR / "mechs.csv"),
         "pods": pods,
         "set_bonuses": set_bonuses,
+        "heatsinks": load_heatsinks(DATA_DIR / "heatsinks.csv"),
         "weapon_ranges": load_weapon_ranges(DATA_DIR / "weapon_ranges.csv"),
         "targeting_computers": load_targeting_computers(DATA_DIR / "targeting_computers.csv"),
     }
@@ -433,13 +561,18 @@ def sanitize(name):
 
 
 def loadout_from_xml(xml_path):
-    """Loadout sauvegarde -> {mech_id, items, pods (composant -> id), armor
-    (armure avant par composant)} ; None si le fichier est illisible."""
+    """Loadout sauvegarde -> {mech_id, heatsinks (type de refroidisseur), items,
+    pods (composant -> id), armor (armure avant par composant)} ; None si le
+    fichier est illisible."""
     try:
         root = ET.parse(xml_path).getroot()
     except ET.ParseError:
         return None
-    loadout = {"mech_id": root.attrib.get("MechID", ""), "items": [], "pods": {}, "armor": {}}
+    loadout = {"mech_id": root.attrib.get("MechID", ""), "heatsinks": "",
+               "items": [], "pods": {}, "armor": {}}
+    upgrade = root.find("Upgrades/HeatSinks")
+    if upgrade is not None:
+        loadout["heatsinks"] = upgrade.attrib.get("ItemID", "")
     for comp in root.iter("component"):
         name = comp.attrib.get("name", "")
         if name in COMPONENT_CODES:
@@ -671,7 +804,8 @@ def build_loadout_xml(build, weapons):
 
 def loadout_from_build(build):
     """Build decode depuis un code -> meme forme que loadout_from_xml()."""
-    loadout = {"mech_id": build["mech_id"], "items": [], "pods": {}, "armor": {}}
+    loadout = {"mech_id": build["mech_id"], "heatsinks": build["heatsinks"],
+               "items": [], "pods": {}, "armor": {}}
     for name, armor, omnipod, items in build["components"]:
         loadout["armor"][name] = armor
         if omnipod is not None:
@@ -755,6 +889,52 @@ def optimal_range_of_build(item_ids, quirks, weapons, gamedata):
     return base_range * (1 + bonus) * tc_multiplier
 
 
+def heatsink_counts(loadout, item_ids, gamedata):
+    """-> (stats du type de refroidisseur, nombre dans le moteur, nombre hors
+    moteur). Le moteur en fournit gratuitement min(10, ses emplacements) ; les
+    refroidisseurs poses remplissent d'abord ses emplacements restants (au-dela
+    de 250 de puissance), puis les emplacements de crit normaux.
+    (None, 0, 0) si le type de refroidisseur est inconnu."""
+    info = gamedata["heatsinks"].get((loadout or {}).get("heatsinks", ""))
+    if not info:
+        return None, 0, 0
+    slots = next((gamedata["engines"][i][2] for i in item_ids if i in gamedata["engines"]), 0)
+    total = min(FREE_ENGINE_HEATSINKS, slots) + sum(1 for i in item_ids if i == info["item"])
+    in_engine = min(slots, total)
+    return info, in_engine, total - in_engine
+
+
+def heat_stats(loadout, item_ids, quirks, gamedata):
+    """Colonnes de chaleur : type, nombre total (refroidisseurs du moteur
+    compris), dissipation par seconde et capacite de chaleur, quirks du mech et
+    de ses pods appliques. {} si le type de refroidisseur est inconnu."""
+    info, in_engine, outside = heatsink_counts(loadout, item_ids, gamedata)
+    if not info:
+        return {}
+    dissipation = in_engine * info["engine_dissipation"] + outside * info["dissipation"]
+    capacity = (BASE_HEAT_CAPACITY + in_engine * info["engine_capacity"]
+                + outside * info["capacity"])
+    return {
+        "heatsink_type": info["abbr"],
+        "heatsinks": in_engine + outside,
+        "heat_dissipation": f"{dissipation * (1 + quirks.get('heatdissipation_multiplier', 0.0)):.2f}",
+        "max_heat": f"{capacity * (1 + quirks.get('maxheat_multiplier', 0.0)):.1f}",
+    }
+
+
+def weapon_summary(item_ids, weapons, gamedata):
+    """Armes du build ("3ERLL/2ML"), du groupe le plus lourd au plus leger.
+    Les equipements comptes a part (TAG, AMS...) sont exclus."""
+    totals = {}
+    for item_id in item_ids:
+        if item_id in weapons and item_id not in gamedata["equipment"]:
+            abbr, tons = weapons[item_id]
+            qty, weight = totals.get(abbr, (0, 0.0))
+            totals[abbr] = (qty + 1, weight + tons)
+    ordered = sorted(totals.items(), key=lambda item: (-item[1][1], item[0]))
+    return "/".join(abbr if qty == 1 else f"{qty}{abbr}" for abbr, (qty, _weight) in ordered)
+
+
 def component_hp(loadout, spec, quirks, structure_modifier):
     """PV par composant : armure avant + quirks d'armure
     + (structure + quirks de structure) x modificateur de structure."""
@@ -781,11 +961,13 @@ def build_stats(loadout, weapons, gamedata, structure_modifier):
     quirks = mech_quirks(loadout, gamedata)
 
     stats = {"tech": spec["tech"], "tonnage": spec["tonnage"],
+             "weapons": weapon_summary(item_ids, weapons, gamedata),
              "jumpjets": sum(1 for item_id in item_ids if item_id in gamedata["jump_jets"])}
+    stats.update(heat_stats(loadout, item_ids, quirks, gamedata))
 
     engine_id = next((item_id for item_id in item_ids if item_id in gamedata["engines"]), None)
     if engine_id:
-        engine_type, rating = gamedata["engines"][engine_id]
+        engine_type, rating, _internal = gamedata["engines"][engine_id]
         stats["engine_type"] = engine_type
         stats["engine_rating"] = rating
         if rating.isdigit():
@@ -837,36 +1019,61 @@ def engine_tag(item_ids, engines, mode):
         return ""
     for item_id in item_ids:
         if item_id in engines:
-            engine_type, rating = engines[item_id]
+            engine_type, rating, _internal = engines[item_id]
             return f"{engine_type}{rating}" if mode == "all" else engine_type
     return ""
 
 
-def compose_name(prefix, variant, original, item_ids, opts, weapons, gamedata, t):
-    """prefixe VARIANTE [original] [armes-equipements] [moteur].
-    Leve NoQualifyingWeapon si le suffixe d'armes est demande mais vide."""
-    parts = [prefix] if prefix else []
-    parts.append(variant.upper() if variant else "UNKNOWN")
-    if original:
-        parts.append(original)
+def heatsink_tag(loadout, gamedata, dhs_rename):
+    """"SHS" pour des refroidisseurs simples ; rien pour des doubles, sauf si
+    l'option dhs_rename est activee (les doubles sont la norme)."""
+    info = gamedata["heatsinks"].get((loadout or {}).get("heatsinks", ""))
+    if not info or not info["abbr"]:
+        return ""
+    if info["abbr"].upper() == "DHS" and not dhs_rename:
+        return ""
+    return info["abbr"]
 
+
+def join_name_blocks(order, blocks):
+    """Assemble les blocs non vides dans l'ordre demande : "-" entre deux blocs
+    voisins de NAME_CHAIN_BLOCKS (armes-equipements), une espace sinon."""
+    parts = []
+    previous = None
+    for block in order:
+        value = blocks.get(block, "")
+        if not value:
+            continue
+        if parts:
+            parts.append("-" if block in NAME_CHAIN_BLOCKS
+                         and previous in NAME_CHAIN_BLOCKS else " ")
+        parts.append(value)
+        previous = block
+    return "".join(parts)
+
+
+def compose_name(loadout, item_ids, prefix, variant, original, opts, weapons, gamedata, t):
+    """Par defaut : prefixe VARIANTE [original] [armes-equipements] [SHS] [moteur],
+    l'ordre des blocs venant de opts["name_order"].
+    Leve NoQualifyingWeapon si le suffixe d'armes est demande mais vide."""
     # avec l'option equipement, TAG/NARC/AMS passent dans le groupe equipement
     # au lieu d'etre classes (et comptes deux fois) parmi les armes
     equipment = gamedata["equipment"] if opts["add_equipment"] else {}
-    chain = []
+    blocks = {
+        "prefix": prefix,
+        "variant": variant.upper() if variant else "UNKNOWN",
+        "original": original,
+        "heatsink": heatsink_tag(loadout, gamedata, opts["dhs_rename"]),
+        "engine": engine_tag(item_ids, gamedata["engines"], opts["engine_mode"]),
+    }
     if opts["add_suffix"]:
         instances = [weapons[i] for i in item_ids if i in weapons and i not in equipment]
-        chain.append(build_suffix(instances, t))
+        blocks["weapons"] = build_suffix(instances, t)
     if equipment:
         found = {equipment[i] for i in item_ids if i in equipment}
-        chain.extend(abbr for abbr in gamedata["equipment_order"] if abbr in found)
-    if chain:
-        parts.append("-".join(chain))
-
-    engine = engine_tag(item_ids, gamedata["engines"], opts["engine_mode"])
-    if engine:
-        parts.append(engine)
-    return sanitize(" ".join(parts))
+        blocks["equipment"] = "-".join(abbr for abbr in gamedata["equipment_order"]
+                                      if abbr in found)
+    return sanitize(join_name_blocks(opts["name_order"], blocks))
 
 
 def find_loadout_basenames(folder):
@@ -1010,29 +1217,75 @@ def looks_like_loadouts_dir(path):
     return parts == list(LOADOUTS_SUFFIX)
 
 
-def autodetect_loadouts_dir():
-    home = Path.home()
-    candidates = []
+def resolve_path_case(path):
+    """Le meme chemin avec la casse reelle du disque, ou None s'il n'existe pas.
+    Proton recree parfois le prefixe en minuscules ("saved games/mechwarrior
+    online") : un chemin enregistre avec la casse du jeu semble alors disparu
+    sous Linux alors que le dossier, lui, est toujours la."""
+    path = Path(path)
+    if path.exists():
+        return path
+    parts = path.parts
+    if not parts:
+        return None
+    current = Path(parts[0])
+    if not current.exists():
+        return None
+    for part in parts[1:]:
+        if (current / part).exists():
+            current = current / part
+            continue
+        try:
+            matches = [c for c in current.iterdir() if c.name.lower() == part.lower()]
+        except OSError:
+            return None
+        if len(matches) != 1:  # introuvable, ou plusieurs casses : on ne devine pas
+            return None
+        current = matches[0]
+    return current
 
+
+def steam_roots():
+    home = Path.home()
     if sys.platform.startswith("linux"):
-        steam_roots = [
+        return [
             home / ".local/share/Steam",
             home / ".steam/steam",
             home / ".var/app/com.valvesoftware.Steam/data/Steam",
         ]
-        for root in steam_roots:
-            users_dir = root / "steamapps/compatdata" / MWO_STEAM_APPID / "pfx/drive_c/users"
-            if users_dir.is_dir():
-                for user_dir in users_dir.iterdir():
-                    candidate = user_dir / "Saved Games/MechWarrior Online/MechLoadouts"
-                    if candidate.is_dir():
-                        candidates.append(candidate)
+    if sys.platform.startswith("win"):
+        return [Path("C:/Program Files (x86)/Steam"), Path("C:/Program Files/Steam")]
+    return []
+
+
+def proton_users_dirs():
+    """Dossiers 'users' des prefixes Proton de MWO (un par racine Steam)."""
+    for root in steam_roots():
+        users_dir = root / "steamapps/compatdata" / MWO_STEAM_APPID / "pfx/drive_c/users"
+        if users_dir.is_dir():
+            yield users_dir
+
+
+def autodetect_loadouts_dir():
+    """Dossier MechLoadouts le plus plausible : un prefixe Proton contient
+    souvent un 'steamuser' fantome a cote du vrai profil, on garde celui qui a
+    le plus de builds."""
+    candidates = []
+
+    if sys.platform.startswith("linux"):
+        for users_dir in proton_users_dirs():
+            for user_dir in sorted(users_dir.iterdir()):
+                candidate = resolve_path_case(user_dir / "Saved Games/MechWarrior Online/MechLoadouts")
+                if candidate and candidate.is_dir():
+                    candidates.append(candidate)
     elif sys.platform.startswith("win"):
-        candidate = home / "Saved Games/MechWarrior Online/MechLoadouts"
+        candidate = Path.home() / "Saved Games/MechWarrior Online/MechLoadouts"
         if candidate.is_dir():
             candidates.append(candidate)
 
-    return candidates[0] if candidates else None
+    if not candidates:
+        return None
+    return max(candidates, key=lambda d: (len(find_loadout_basenames(d)), d.stat().st_mtime))
 
 
 def has_gamedata_pak(path):
@@ -1040,23 +1293,92 @@ def has_gamedata_pak(path):
 
 
 def autodetect_install_dir():
-    home = Path.home()
-    roots = []
-
-    if sys.platform.startswith("linux"):
-        roots = [
-            home / ".local/share/Steam",
-            home / ".steam/steam",
-            home / ".var/app/com.valvesoftware.Steam/data/Steam",
-        ]
-    elif sys.platform.startswith("win"):
-        roots = [Path("C:/Program Files (x86)/Steam"), Path("C:/Program Files/Steam")]
-
-    for root in roots:
+    for root in steam_roots():
         candidate = root / "steamapps/common/MechWarrior Online"
         if has_gamedata_pak(candidate):
             return candidate
     return None
+
+
+def installdir_picker_start(cfg):
+    """Dossier sur lequel ouvrir le selecteur d'installation."""
+    cached = cfg["general"].get("game_install_dir", "")
+    if cached and Path(cached).is_dir():
+        return cached
+    for root in steam_roots():
+        common = root / "steamapps/common"
+        if common.is_dir():
+            return str(common)
+    return None
+
+
+def cached_game_dir(cfg):
+    """Dossier de jeu enregistre, avec reparation de casse si le prefixe Proton
+    a ete recree. None s'il n'est pas (ou plus) utilisable."""
+    cached = cfg["general"].get("game_dir", "")
+    if not cached:
+        return None
+    if Path(cached).is_dir():
+        return Path(cached)
+    repaired = resolve_path_case(cached)
+    if repaired and repaired.is_dir():
+        cfg["general"]["game_dir"] = str(repaired)
+        save_config(cfg)
+        return repaired
+    return None
+
+
+def gamedir_picker_start(cfg):
+    """Dossier sur lequel ouvrir le selecteur : le plus proche du dossier de jeu
+    connu, sinon le prefixe Proton, sinon rien (= home)."""
+    cached = cfg["general"].get("game_dir", "")
+    if cached:
+        for candidate in (Path(cached), *Path(cached).parents):
+            resolved = resolve_path_case(candidate)
+            if resolved and resolved.is_dir():
+                return str(resolved)
+    for users_dir in proton_users_dirs():
+        return str(users_dir)
+    return None
+
+
+def resolve_game_dir(cfg, t, use_cached=True, allow_pick=True):
+    """Dossier MechLoadouts valide : valeur enregistree, auto-detection, ou
+    dossier choisi par le joueur. None si celui-ci annule."""
+    if use_cached:
+        cached_raw = cfg["general"].get("game_dir", "")
+        cached = cached_game_dir(cfg)
+        if cached:
+            if str(cached) != cached_raw:
+                print(t("gamedir_repaired", path=cached))
+            return cached
+        if cached_raw:
+            print(t("gamedir_missing", path=cached_raw))
+
+    detected = autodetect_loadouts_dir()
+    if detected:
+        print(t("autodetect_found", path=detected))
+        if ask_yes_no(t, "autodetect_confirm"):
+            cfg["general"]["game_dir"] = str(detected)
+            save_config(cfg)
+            print(t("gamedir_saved", path=detected))
+            return detected
+    else:
+        print(t("autodetect_not_found"))
+
+    if not allow_pick:
+        return None
+
+    picked = ask_folder(t, "pick_gamedir_title", gamedir_picker_start(cfg),
+                        manual_prompt_key="manual_gamedir_prompt")
+    if picked is None:
+        return None
+    if not looks_like_loadouts_dir(picked):
+        print(t("gamedir_suffix_warning"))
+    cfg["general"]["game_dir"] = str(picked)
+    save_config(cfg)
+    print(t("gamedir_saved", path=picked))
+    return picked
 
 
 def resolve_install_dir(cfg, t):
@@ -1075,7 +1397,7 @@ def resolve_install_dir(cfg, t):
             return detected
 
     while True:
-        picked = ask_folder(t, "pick_installdir_title",
+        picked = ask_folder(t, "pick_installdir_title", installdir_picker_start(cfg),
                              manual_prompt_key="manual_installdir_prompt")
         if picked is None:
             return None
@@ -1140,26 +1462,10 @@ def first_run_setup(cfg):
     t = Translator(lang)
     print(t("welcome"))
 
-    game_dir = autodetect_loadouts_dir()
-    if game_dir:
-        print(t("autodetect_found", path=game_dir))
-        if not ask_yes_no(t, "autodetect_confirm"):
-            game_dir = None
-    else:
-        print(t("autodetect_not_found"))
-
-    if not game_dir:
-        game_dir = ask_folder(t, "pick_gamedir_title", manual_prompt_key="manual_gamedir_prompt")
-
     cfg["general"]["language"] = lang
     cfg["general"]["backup_before_rename"] = "true"
     cfg["general"]["structure_modifier"] = str(DEFAULT_STRUCTURE_MODIFIER)
-    if game_dir:
-        if not looks_like_loadouts_dir(game_dir):
-            print(t("gamedir_suffix_warning"))
-        cfg["general"]["game_dir"] = str(game_dir)
-        print(t("gamedir_saved", path=game_dir))
-    else:
+    if not resolve_game_dir(cfg, t, use_cached=False):
         print(t("gamedir_none"))
 
     cfg["last_used"]["add_prefix"] = "false"
@@ -1170,6 +1476,7 @@ def first_run_setup(cfg):
     cfg["last_used"]["keep_original"] = "true"
     cfg["last_used"]["source_dir"] = ""
     save_config(cfg)
+    apply_config_defaults(cfg)
     return t
 
 
@@ -1195,6 +1502,7 @@ COMPONENT_CODES = {
 # seules les quirks utiles aux statistiques sont conservees dans les CSV
 STAT_QUIRK = re.compile(
     r"^(mechtopspeed_multiplier|critchance_receiving_multiplier|increasedstructure_multiplier"
+    r"|heatdissipation_multiplier|maxheat_multiplier"
     r"|(internalresist|armorresist)_[a-z]+_additive|[a-z0-9]+_range_multiplier)$")
 
 
@@ -1365,7 +1673,48 @@ def fetch_engines_from_pak(pak_path):
         match = re.match(r"Engine_(.+)_(\d+)$", el.attrib.get("name", ""))
         if match:
             engine_type = ENGINE_TYPE_ABBR.get(match.group(1), match.group(1).upper())
-            rows.append((el.attrib["id"], el.attrib["name"], engine_type, match.group(2)))
+            stats = el.find("EngineStats")
+            internal = stats.attrib.get("heatsinks", "") if stats is not None else ""
+            rows.append((el.attrib["id"], el.attrib["name"], engine_type, match.group(2), internal))
+    rows.sort(key=lambda r: int(r[0]))
+    return rows
+
+
+HEATSINKS_CSV_HEADER = ["upgrade_id", "item_id", "name", "abbreviation",
+                        "dissipation", "engine_dissipation", "capacity", "engine_capacity"]
+
+
+def _positive(value):
+    """Les capacites sont stockees en negatif dans le pak (elles retirent de la
+    chaleur) ; on les garde en positif, c'est ce qu'elles ajoutent au maximum."""
+    number = _to_float(value)
+    return "" if number is None else f"{abs(number):g}"
+
+
+def fetch_heatsinks_from_pak(pak_path):
+    """Une ligne par type de refroidisseur (simple / double, IS / Clan), reliant
+    l'id d'upgrade ecrit dans les loadouts aux stats de l'objet correspondant."""
+    stats_by_id = {}
+    for el in read_pak_xml(pak_path, "Libs/Items/Modules/Equipment.xml").iter("Module"):
+        stats = el.find("HeatSinkStats")
+        if stats is not None:
+            stats_by_id[el.attrib["id"]] = stats.attrib
+
+    rows = []
+    for el in read_pak_xml(pak_path, "Libs/Items/UpgradeTypes/UpgradeTypes.xml").iter("UpgradeType"):
+        if el.attrib.get("CType") != "HeatSink":
+            continue
+        type_stats = el.find("HeatSinkTypeStats")
+        item_id = type_stats.attrib.get("compatibleHeatSink", "") if type_stats is not None else ""
+        sink = stats_by_id.get(item_id)
+        if not sink:
+            continue
+        loc = el.find("Loc")
+        short_name = loc.attrib.get("shortNameTag", "") if loc is not None else ""
+        rows.append((el.attrib["id"], item_id, el.attrib.get("name", ""),
+                     "SHS" if "single" in short_name.lower() else "DHS",
+                     sink.get("cooling", ""), sink.get("engineCooling", ""),
+                     _positive(sink.get("heatbase")), _positive(sink.get("engineHeatbase"))))
     rows.sort(key=lambda r: int(r[0]))
     return rows
 
@@ -1406,14 +1755,29 @@ def _equipment_order(row):
     return (rank,) + _id_order(row)
 
 
+def csv_header(path):
+    if not Path(path).exists():
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return next(csv.reader(f), [])
+
+
 def merge_table(path, header, fresh_rows, overwrite_existing, sort_key=_id_order):
     """Tables editables a la main (armes, equipements, moteurs). En mode ajout,
     une ligne deja presente n'est jamais modifiee (abreviations personnalisees
-    conservees) : seuls les nouveaux ids du jeu sont ajoutes. Le mode ecrasement
-    (Reset) reecrit tout. Renvoie le nombre de lignes ajoutees."""
+    conservees) : seuls les nouveaux ids du jeu sont ajoutes, et une colonne
+    apparue avec une nouvelle version est remplie depuis le jeu. Le mode
+    ecrasement (Reset) reecrit tout. Renvoie le nombre de lignes ajoutees."""
     rows = {}
     if not overwrite_existing:
-        rows = {row[header[0]]: [row.get(col, "") for col in header] for row in read_csv_rows(path)}
+        known = set(csv_header(path))
+        fresh_by_id = {row[0]: list(row) for row in fresh_rows}
+        for row in read_csv_rows(path):
+            key = row[header[0]]
+            fresh = fresh_by_id.get(key)
+            rows[key] = [row.get(col, "") if col in known
+                         else (fresh[i] if fresh and i < len(fresh) else "")
+                         for i, col in enumerate(header)]
     added = 0
     for row in fresh_rows:
         if row[0] not in rows:
@@ -1431,7 +1795,7 @@ def update_editable_tables(pak_path, overwrite_existing):
                     overwrite_existing),
         merge_table(DATA_DIR / "equipment.csv", ["id", "name", "abbreviation"],
                     fetch_equipment_from_pak(pak_path), overwrite_existing, _equipment_order),
-        merge_table(DATA_DIR / "engines.csv", ["id", "name", "type", "rating"],
+        merge_table(DATA_DIR / "engines.csv", ["id", "name", "type", "rating", "internal_heatsinks"],
                     fetch_engines_from_pak(pak_path), overwrite_existing),
     )
 
@@ -1448,6 +1812,8 @@ def write_game_tables(game_root):
                             fetch_weapon_ranges_from_pak(pak_path)),
         "tcs": write_csv(DATA_DIR / "targeting_computers.csv", ["id", "name", "weapons", "range_multiplier"],
                          fetch_targeting_computers_from_pak(pak_path)),
+        "heatsinks": write_csv(DATA_DIR / "heatsinks.csv", HEATSINKS_CSV_HEADER,
+                               fetch_heatsinks_from_pak(pak_path)),
     }
 
 
@@ -1475,7 +1841,8 @@ def do_update(cfg, mechs, weapons, gamedata, t):
 
     print(t("update_done", mechs=counts["mechs"], weapons=added_weapons))
     print(t("update_gear_done", engines=added_engines, equipment=added_equipment))
-    print(t("update_stats_done", pods=counts["pods"], ranges=counts["ranges"], tcs=counts["tcs"]))
+    print(t("update_stats_done", pods=counts["pods"], ranges=counts["ranges"],
+            tcs=counts["tcs"], heatsinks=counts["heatsinks"]))
 
 
 def do_reset(cfg, mechs, weapons, gamedata, t):
@@ -1558,17 +1925,12 @@ def ask_export_kind(t):
         print(t("export_kind_invalid"))
 
 
-EXPORT_CSV_HEADER = ["name", "buildcode", "mechvariant", "tonnage", "class", "owner", "date",
-                     "jumpjets", "engine_type", "engine_rating", "max_speed", "equipment", "tech",
-                     "optimal_range", "leg_hp", "kill_hp", "total_hp"]
-
-
 def structure_modifier(cfg):
     value = _to_float(cfg["general"].get("structure_modifier", ""))
     return DEFAULT_STRUCTURE_MODIFIER if value is None else value
 
 
-def export_csv(game_dir, basenames, dest_dir, name, mechs, weapons, gamedata, modifier):
+def export_csv(game_dir, basenames, dest_dir, name, mechs, weapons, gamedata, modifier, columns):
     """Une ligne par build : identite du build puis statistiques calculees.
     Les metadonnees manquantes sont completees dans les fichiers au passage."""
     owner = current_profile_name(game_dir)
@@ -1588,20 +1950,19 @@ def export_csv(game_dir, basenames, dest_dir, name, mechs, weapons, gamedata, mo
                       "owner": meta["owner"], "date": meta["date"]})
         if stats.get("tonnage"):
             stats["class"] = weight_class(stats["tonnage"])
-        rows.append([stats.get(column, "") for column in EXPORT_CSV_HEADER])
+        rows.append([stats.get(column, "") for column in columns])
 
     save_registry(registry)
     csv_path = dest_dir / f"{name}.csv"
-    write_csv(csv_path, EXPORT_CSV_HEADER, rows)
+    write_csv(csv_path, columns, rows)
     return csv_path, len(rows), unknown, owner
 
 
 def do_export(cfg, mechs, weapons, gamedata, t):
-    game_dir = cfg["general"].get("game_dir", "")
-    if not game_dir or not Path(game_dir).is_dir():
-        print(t("export_no_gamedir"))
+    game_dir = resolve_game_dir(cfg, t)
+    if game_dir is None:
+        print(t("export_cancelled"))
         return
-    game_dir = Path(game_dir)
 
     basenames = find_loadout_basenames(game_dir)
     if not basenames:
@@ -1626,7 +1987,7 @@ def do_export(cfg, mechs, weapons, gamedata, t):
 
     if kind == "csv":
         csv_path, count, unknown, owner = export_csv(game_dir, basenames, dest_dir, name, mechs, weapons,
-                                                     gamedata, structure_modifier(cfg))
+                                                     gamedata, structure_modifier(cfg), csv_columns(cfg))
         cfg["last_used"]["export_dir"] = str(dest_dir)
         save_config(cfg)
         print(t("export_csv_done", n=count, path=csv_path))
@@ -1714,19 +2075,22 @@ def read_build_codes(cfg, t):
 
 def ask_import_dest(cfg, t):
     """Dossier du jeu, ou n'importe quel autre dossier."""
-    game_dir = cfg["general"].get("game_dir", "")
-    if game_dir and Path(game_dir).is_dir():
+    game_dir = cached_game_dir(cfg)
+    if game_dir is None:
+        print(t("import_dest_no_gamedir"))
+        # auto-detection seule : le selecteur qui suit choisit une destination,
+        # pas le dossier du jeu, et ne doit donc rien enregistrer dans le cfg
+        game_dir = resolve_game_dir(cfg, t, allow_pick=False)
+    if game_dir is not None:
         while True:
             choice = input(t("import_dest_prompt", path=game_dir)).strip()
             if choice in ("1", ""):
-                return Path(game_dir)
+                return game_dir
             if choice == "2":
                 break
             print(t("import_dest_invalid"))
-    else:
-        print(t("import_dest_no_gamedir"))
 
-    return ask_folder(t, "pick_import_dest_title", game_dir or None,
+    return ask_folder(t, "pick_import_dest_title", str(game_dir) if game_dir else None,
                       manual_prompt_key="manual_import_dest_prompt")
 
 
@@ -1743,6 +2107,7 @@ def do_import(cfg, mechs, weapons, gamedata, t):
         "add_equipment": ask_yes_no(t, "ask_equipment_yn"),
         "engine_mode": ask_engine_mode(t),
     }
+    opts.update(naming_options(cfg))
 
     plan = []
     skipped = []
@@ -1756,8 +2121,9 @@ def do_import(cfg, mechs, weapons, gamedata, t):
 
         _chassis, variant = mechs.get(build["mech_id"], (None, None))
         try:
-            item_ids = effective_item_ids(loadout_from_build(build), gamedata)
-            name = compose_name(prefix, variant, "", item_ids, opts, weapons, gamedata, t)
+            loadout = loadout_from_build(build)
+            item_ids = effective_item_ids(loadout, gamedata)
+            name = compose_name(loadout, item_ids, prefix, variant, "", opts, weapons, gamedata, t)
         except NoQualifyingWeapon as e:
             skipped.append((label, str(e)))
             continue
@@ -1821,7 +2187,8 @@ def build_plan(folder, opts, mechs, weapons, gamedata, t):
         item_ids = effective_item_ids(loadout, gamedata)
         original = basename if opts["keep_original"] else ""
         try:
-            name = compose_name(opts["prefix"], variant, original, item_ids, opts, weapons, gamedata, t)
+            name = compose_name(loadout, item_ids, opts["prefix"], variant, original,
+                                opts, weapons, gamedata, t)
         except NoQualifyingWeapon as e:
             skipped.append((basename, str(e)))
             continue
@@ -1891,11 +2258,13 @@ def run_rename(folder, opts, cfg, mechs, weapons, gamedata, t):
     cfg["last_used"]["source_dir"] = str(folder)
     save_config(cfg)
 
-    game_dir = cfg["general"].get("game_dir", "")
-    if not game_dir or not renamed_stems:
+    if not renamed_stems:
         return
-    if ask_yes_no(t, "ask_copy_to_game", path=game_dir):
-        dest = Path(game_dir)
+    known = cached_game_dir(cfg) or cfg["general"].get("game_dir", "") or t("settings_gamedir_none")
+    if ask_yes_no(t, "ask_copy_to_game", path=known):
+        dest = resolve_game_dir(cfg, t)
+        if dest is None:
+            return
         copied = 0
         overwritten = 0
         for stem in renamed_stems:
@@ -1941,13 +2310,15 @@ def do_advanced(cfg, mechs, weapons, gamedata, t):
 def last_used_options(cfg):
     last = cfg["last_used"]
     engine_mode = last.get("engine_mode", "none")
-    return {
+    opts = {
         "prefix": last.get("prefix", "") if last.getboolean("add_prefix", fallback=False) else "",
         "add_suffix": last.getboolean("add_suffix", fallback=True),
         "add_equipment": last.getboolean("add_equipment", fallback=False),
         "engine_mode": engine_mode if engine_mode in ENGINE_MODES else "none",
         "keep_original": last.getboolean("keep_original", fallback=True),
     }
+    opts.update(naming_options(cfg))
+    return opts
 
 
 def do_quick(cfg, mechs, weapons, gamedata, t):
@@ -1961,24 +2332,26 @@ def do_quick(cfg, mechs, weapons, gamedata, t):
 
 
 def quick_example(cfg):
+    """Exemple de nom avec les reglages courants (mech a refroidisseurs simples)."""
     opts = last_used_options(cfg)
-    parts = [opts["prefix"]] if opts["prefix"] else []
-    parts.append("ANH-1P")
-    if opts["keep_original"]:
-        parts.append("1v1")
-    chain = (["3LL"] if opts["add_suffix"] else []) + (["JJ"] if opts["add_equipment"] else [])
-    if chain:
-        parts.append("-".join(chain))
-    if opts["engine_mode"] != "none":
-        parts.append("XL300" if opts["engine_mode"] == "all" else "XL")
-    return " ".join(parts)
+    blocks = {
+        "prefix": opts["prefix"],
+        "variant": "ANH-1P",
+        "original": "1v1" if opts["keep_original"] else "",
+        "weapons": "3LL" if opts["add_suffix"] else "",
+        "equipment": "JJ" if opts["add_equipment"] else "",
+        "heatsink": "SHS",
+        "engine": {"all": "XL300", "type": "XL"}.get(opts["engine_mode"], ""),
+    }
+    return join_name_blocks(opts["name_order"], blocks)
 
 
 def settings_menu(cfg, t):
     while True:
         print(t("settings_title"))
         lang = cfg["general"].get("language", "en")
-        game_dir = cfg["general"].get("game_dir", "") or t("settings_gamedir_none")
+        game_dir = str(cached_game_dir(cfg) or cfg["general"].get("game_dir", "")
+                       or t("settings_gamedir_none"))
         install_dir = cfg["general"].get("game_install_dir", "") or t("settings_gamedir_none")
         backup_state = t("state_on") if cfg["general"].getboolean("backup_before_rename", fallback=True) else t("state_off")
         print(f"1) {t('settings_lang', lang=lang)}")
@@ -1995,15 +2368,10 @@ def settings_menu(cfg, t):
             save_config(cfg)
             t = Translator(new_lang)
         elif choice == "2":
-            picked_path = ask_folder(t, "pick_gamedir_title", manual_prompt_key="manual_gamedir_prompt")
-            if picked_path:
-                if not looks_like_loadouts_dir(picked_path):
-                    print(t("gamedir_suffix_warning"))
-                cfg["general"]["game_dir"] = str(picked_path)
-                save_config(cfg)
-                print(t("gamedir_saved", path=picked_path))
+            resolve_game_dir(cfg, t, use_cached=False)
         elif choice == "3":
-            picked_path = ask_folder(t, "pick_installdir_title", manual_prompt_key="manual_installdir_prompt")
+            picked_path = ask_folder(t, "pick_installdir_title", installdir_picker_start(cfg),
+                                     manual_prompt_key="manual_installdir_prompt")
             if picked_path:
                 if not has_gamedata_pak(picked_path):
                     print(t("installdir_invalid"))
@@ -2063,6 +2431,10 @@ def main():
         if lang not in available_languages():
             lang = "en"
         t = Translator(lang)
+        added = apply_config_defaults(cfg)
+        if added:
+            print(t("config_defaults_added", n=added, path=CONFIG_PATH))
+    warn_unknown_options(cfg, t)
 
     while True:
         print(t("menu_title"))
