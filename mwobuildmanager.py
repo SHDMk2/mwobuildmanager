@@ -57,7 +57,7 @@ EXPORT_CSV_COLUMNS = ("name", "mechvariant", "mechtype", "variant_type", "class"
                       "engine_type", "engine_rating", "max_speed",
                       "weapons", "equipment", "jumpjets",
                       "heatsink_type", "heatsinks", "heat_dissipation", "max_heat",
-                      "optimal_range", "leg_hp", "kill_hp", "total_hp",
+                      "optimal_range", "max_range", "leg_hp", "kill_hp", "total_hp",
                       "role", "owner", "date")
 # colonnes connues de la 1.7, derniere version sans csv_columns_known dans le cfg
 LEGACY_CSV_COLUMNS = ("name", "mechvariant", "class", "tonnage", "tech", "buildcode",
@@ -449,9 +449,10 @@ def load_heatsinks(path):
 
 
 def load_weapon_ranges(path):
-    """id -> (nom interne, portee optimale, familles pour les quirks)."""
+    """id -> (nom interne, portee optimale, familles pour les quirks, portee max)."""
     return {row["id"]: (row["name"], _to_float(row.get("optimal_range")),
-                        set(filter(None, row.get("aliases", "").split(";"))))
+                        set(filter(None, row.get("aliases", "").split(";"))),
+                        _to_float(row.get("max_range")))
             for row in read_csv_rows(path)}
 
 
@@ -1023,20 +1024,21 @@ def mech_quirks(loadout, gamedata):
     return quirks
 
 
-def optimal_range_of_build(item_ids, quirks, weapons, gamedata):
-    """Portee optimale du groupe d'armes le plus lourd (quantite x tonnage) :
-    optimale x (1 + quirks de portee applicables) x bonus du Targeting Computer."""
+def ranges_of_build(item_ids, quirks, weapons, gamedata):
+    """(portee optimale, portee max) du groupe d'armes le plus lourd (quantite x
+    tonnage), chacune x (1 + quirks de portee applicables) x bonus du Targeting
+    Computer ; (None, None) sans arme."""
     groups = {}
     for item_id in item_ids:
         if item_id in weapons and item_id not in gamedata["equipment"]:
             qty, tons = groups.get(item_id, (0, 0.0))
             groups[item_id] = (qty + 1, tons + weapons[item_id][1])
     if not groups:
-        return None
+        return None, None
     heaviest = max(groups, key=lambda item_id: groups[item_id][1])
-    name, base_range, aliases = gamedata["weapon_ranges"].get(heaviest, ("", None, set()))
+    name, base_range, aliases, base_max = gamedata["weapon_ranges"].get(heaviest, ("", None, set(), None))
     if base_range is None:
-        return None
+        return None, None
 
     bonus = 0.0
     for quirk, value in quirks.items():
@@ -1050,7 +1052,8 @@ def optimal_range_of_build(item_ids, quirks, weapons, gamedata):
         for compatible, multiplier in gamedata["targeting_computers"].get(item_id, []):
             if name in compatible:
                 tc_multiplier = max(tc_multiplier, multiplier)
-    return base_range * (1 + bonus) * tc_multiplier
+    factor = (1 + bonus) * tc_multiplier
+    return base_range * factor, (base_max * factor if base_max is not None else None)
 
 
 def heatsink_counts(loadout, item_ids, gamedata):
@@ -1144,9 +1147,11 @@ def build_stats(loadout, weapons, gamedata, structure_modifier):
              if item_id in gamedata["equipment"] and item_id not in gamedata["jump_jets"]}
     stats["equipment"] = "/".join(abbr for abbr in gamedata["equipment_order"] if abbr in found)
 
-    rng = optimal_range_of_build(item_ids, quirks, weapons, gamedata)
-    if rng is not None:
-        stats["optimal_range"] = f"{rng:.0f}"
+    optimal, maximum = ranges_of_build(item_ids, quirks, weapons, gamedata)
+    if optimal is not None:
+        stats["optimal_range"] = f"{optimal:.0f}"
+    if maximum is not None:
+        stats["max_range"] = f"{maximum:.0f}"
 
     hp = component_hp(loadout, spec, quirks, structure_modifier)
     kill = min(hp["lt"], hp["rt"]) if engine_id in gamedata["is_xl_engines"] else hp["ct"]
@@ -1194,7 +1199,7 @@ def classify_role(item_ids, stats, weapons, gamedata):
     for item_id in item_ids:
         if item_id in weapons and item_id not in utility:
             tons = weapons[item_id][1]
-            name, _range, aliases = gamedata["weapon_ranges"].get(item_id, ("", None, set()))
+            name, _range, aliases, _max = gamedata["weapon_ranges"].get(item_id, ("", None, set(), None))
             mounted.append((tons, aliases | {name.lower()}))
             total += tons
     categories = {utility[item_id] for item_id in item_ids if utility.get(item_id)}
@@ -1943,12 +1948,20 @@ def optimal_range(weapon_el):
     return best
 
 
+def max_range(weapon_el):
+    """Portee maximale : debut du dernier palier (la ou les degats tombent a 0)."""
+    starts = [_to_float(rng.attrib.get("start")) for rng in weapon_el.iter("Range")]
+    starts = [start for start in starts if start is not None]
+    return max(starts) if starts else None
+
+
 def fetch_weapon_ranges_from_pak(pak_path):
     rows = []
     for el in read_pak_xml(pak_path, "Libs/Items/Weapons/Weapons.xml").iter("Weapon"):
-        rng = optimal_range(el)
+        rng, far = optimal_range(el), max_range(el)
         aliases = ";".join(a.strip().lower() for a in el.attrib.get("HardpointAliases", "").split(",") if a.strip())
-        rows.append([el.attrib["id"], el.attrib.get("name", ""), f"{rng:g}" if rng is not None else "", aliases])
+        rows.append([el.attrib["id"], el.attrib.get("name", ""), f"{rng:g}" if rng is not None else "",
+                     f"{far:g}" if far is not None else "", aliases])
     rows.sort(key=lambda r: int(r[0]))
     return rows
 
@@ -2131,7 +2144,7 @@ def write_game_tables(game_root):
         "pods": write_csv(DATA_DIR / "omnipods.csv",
                           ["id", "chassis", "set", "component", "fixed_items", "quirks"],
                           fetch_omnipods_from_game(game_root)),
-        "ranges": write_csv(DATA_DIR / "weapon_ranges.csv", ["id", "name", "optimal_range", "aliases"],
+        "ranges": write_csv(DATA_DIR / "weapon_ranges.csv", ["id", "name", "optimal_range", "max_range", "aliases"],
                             fetch_weapon_ranges_from_pak(pak_path)),
         "tcs": write_csv(DATA_DIR / "targeting_computers.csv", ["id", "name", "weapons", "range_multiplier"],
                          fetch_targeting_computers_from_pak(pak_path)),

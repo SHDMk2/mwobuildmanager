@@ -88,7 +88,7 @@ Exports every build of the game folder, either as a `.7z`/`.rar`/`.zip` archive,
 | `jumpjets` | number of jump jets |
 | `heatsink_type`, `heatsinks` | `SHS`/`DHS`, total number (engine ones included) |
 | `heat_dissipation`, `max_heat` | heat per second, heat capacity |
-| `optimal_range` | optimal range of the heaviest weapon group, in meters |
+| `optimal_range`, `max_range` | optimal and maximum range of the heaviest weapon group, in meters |
 | `leg_hp`, `kill_hp`, `total_hp` | both legs; weakest side torso with an Inner Sphere XL engine, otherwise centre torso; all components |
 | `role`, `owner`, `date` | see *Role, owner and date* |
 
@@ -100,7 +100,7 @@ Exports every build of the game folder, either as a `.7z`/`.rar`/`.zip` archive,
 Mech quirks, OmniPod quirks and set bonuses are always included.
 
 - **Speed** = engine rating ÷ tonnage × 16.2 × (1 + speed quirks).
-- **Range** = optimal range of the heaviest weapon group × (1 + range quirks) × Targeting Computer bonus.
+- **Range** = optimal (or maximum) range of the heaviest weapon group × (1 + range quirks) × Targeting Computer bonus.
 - **HP** = front armor placed on the build + armor quirks + (structure + structure quirks) × structure modifier. The modifier is 0.5 by default (Settings), plus half of the mech's *crit chance receiving* quirk: a mech with a −100 % quirk has its structure count fully.
 - **Heat.** An engine holds up to 10 heat sinks for free, more above 250 rating; heat sinks inside the engine are worth more than the others.
   - `heat_dissipation` = (engine ones × engine dissipation + others × dissipation) × (1 + heat dissipation quirks)
@@ -146,7 +146,7 @@ name_order = prefix,variant,original,weapons,equipment,heatsink,engine
 `csv_columns` — any column from *CSV columns*, in any order. Removing `role`, `owner` or `date` means a build imported back from that `.csv` can't recover them:
 
 ```
-csv_columns = name,mechvariant,mechtype,variant_type,class,tonnage,tech,cockpit_height,buildcode,engine_type,engine_rating,max_speed,weapons,equipment,jumpjets,heatsink_type,heatsinks,heat_dissipation,max_heat,optimal_range,leg_hp,kill_hp,total_hp,role,owner,date
+csv_columns = name,mechvariant,mechtype,variant_type,class,tonnage,tech,cockpit_height,buildcode,engine_type,engine_rating,max_speed,weapons,equipment,jumpjets,heatsink_type,heatsinks,heat_dissipation,max_heat,optimal_range,max_range,leg_hp,kill_hp,total_hp,role,owner,date
 ```
 
 </details>
