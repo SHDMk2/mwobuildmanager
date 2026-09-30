@@ -1,0 +1,16 @@
+priority,role,families,min_share,min_range,max_range,min_speed,max_speed,min_tonnage,max_tonnage,requires
+10,LRM Boat,lrm|thunderbolt|arrowiv|clanarrowiv,0.5,,,,,,,
+20,ATM Boat,atm,0.5,,,,,,,
+30,Streak Boat,streaksrm,0.5,,,,,,,
+40,MRM Boat,mrm|rocketlauncher,0.5,,,,,,,
+50,NARC Support,,,,,,,,,NARC
+60,ECM Support,,,,,,,,40,ECM
+80,Scout,,,,,120,,,35,
+90,Poptart,ppcfamily|gaussrifle|isgaussrifle|clangaussrifle,0.6,450,,,,50,90,JJ
+100,Brawler,,,,330,,,,,
+110,Brawler,ballistic|missile,0.6,,420,,,,,
+120,Dakka,autocannon|ultraautocannon|rotaryautocannon|lbxautocannon|machinegun|ismachinegun|clanmachinegun,0.6,,,,,,,
+130,Sniper,,,690,,,,,,
+140,Laser Vomit,laser,0.8,,,,,,,
+150,PPFLD,ppcfamily|gaussrifle|isgaussrifle|clangaussrifle|autocannon|ultraautocannon|lbxautocannon|rotaryautocannon,0.6,,,,,,,
+1000,Mid-Range,,,,,,,,,

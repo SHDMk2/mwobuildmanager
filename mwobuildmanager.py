@@ -18,6 +18,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import unicodedata
+import urllib.request
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -50,15 +53,22 @@ NAME_BLOCKS = ("prefix", "variant", "original", "weapons", "equipment", "heatsin
 NAME_CHAIN_BLOCKS = ("weapons", "equipment")
 # Colonnes connues de l'export CSV, dans l'ordre par defaut (option csv_columns
 # du cfg) : identite, chassis, moteur, armement, chaleur, PV, puis provenance.
-EXPORT_CSV_COLUMNS = ("name", "mechvariant", "class", "tonnage", "tech", "buildcode",
+EXPORT_CSV_COLUMNS = ("name", "mechvariant", "mechtype", "variant_type", "class", "tonnage", "tech", "cockpit_height", "buildcode",
                       "engine_type", "engine_rating", "max_speed",
                       "weapons", "equipment", "jumpjets",
                       "heatsink_type", "heatsinks", "heat_dissipation", "max_heat",
                       "optimal_range", "leg_hp", "kill_hp", "total_hp",
-                      "owner", "date")
+                      "role", "owner", "date")
+# colonnes connues de la 1.7, derniere version sans csv_columns_known dans le cfg
+LEGACY_CSV_COLUMNS = ("name", "mechvariant", "class", "tonnage", "tech", "buildcode",
+                      "engine_type", "engine_rating", "max_speed", "weapons", "equipment", "jumpjets",
+                      "heatsink_type", "heatsinks", "heat_dissipation", "max_heat",
+                      "optimal_range", "leg_hp", "kill_hp", "total_hp", "owner", "date")
 APP_NAME = "MechLoadout Renamer"
-VERSION = "1.7"
+VERSION_FILE = SCRIPT_DIR / ".ver"
 PROJECT_URL = "https://github.com/SHDMk2/mwobuildmanager"
+# .ver de la branche principale sur GitHub, compare au .ver local au demarrage
+VERSION_URL = "https://raw.githubusercontent.com/SHDMk2/mwobuildmanager/main/.ver"
 DONATE_URL = "paypal.me/ToulouseServers"
 REGISTRY_PATH = DATA_DIR / "build_registry.csv"
 
@@ -127,6 +137,26 @@ WEAPON_ABBR = {
 }
 
 
+def read_version():
+    try:
+        text = VERSION_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "0"
+    return text or "0"
+
+
+VERSION = read_version()
+
+
+def version_tuple(text):
+    """Cle de comparaison d'une version. Les versions sont des nombres decimaux
+    (1.7 < 1.75 < 1.8) : "1.75" -> (1, 0.75). Apres 1.9 vient donc 2.0, pas 1.10."""
+    match = re.match(r"\s*(\d+)(?:\.(\d+))?", text or "")
+    if not match:
+        return (0, 0.0)
+    return (int(match.group(1)), float(f"0.{match.group(2) or 0}"))
+
+
 def available_languages():
     return sorted(p.stem for p in LOCALES_DIR.glob("*.json"))
 
@@ -168,6 +198,7 @@ CONFIG_DEFAULTS = {
         "dhs_rename": "false",
         "name_order": ",".join(NAME_BLOCKS),
         "csv_columns": ",".join(EXPORT_CSV_COLUMNS),
+        "check_updates": "true",
     },
     "last_used": {
         "add_prefix": "false",
@@ -214,6 +245,29 @@ def apply_config_defaults(cfg):
     if added:
         save_config(cfg)
     return added
+
+
+def upgrade_config(cfg):
+    """Ajoute a csv_columns, a leur place par defaut, les colonnes que ce cfg n'a
+    encore jamais vues (csv_columns_known), puis les note comme vues : une colonne
+    retiree ensuite par l'utilisateur n'est donc jamais remise."""
+    raw_known = cfg["general"].get("csv_columns_known")
+    known = set(re.split(r"[,;]", raw_known)) if raw_known is not None else set(LEGACY_CSV_COLUMNS)
+    new_columns = [c for c in EXPORT_CSV_COLUMNS if c not in known]
+    if not new_columns and raw_known is not None:
+        return
+    columns = [c.strip().lower() for c in re.split(r"[,;]", cfg["general"].get("csv_columns", "")) if c.strip()]
+    if columns:
+        for column in new_columns:
+            if column in columns:
+                continue
+            index = EXPORT_CSV_COLUMNS.index(column)
+            before = next((c for c in reversed(EXPORT_CSV_COLUMNS[:index]) if c in columns), None)
+            columns.insert(columns.index(before) + 1 if before else 0, column)
+        cfg["general"]["csv_columns"] = ",".join(columns)
+    cfg["general"]["csv_columns_known"] = ",".join(EXPORT_CSV_COLUMNS)
+    cfg["general"].pop("config_version", None)  # ancien mecanisme (1.75), remplace
+    save_config(cfg)
 
 
 def bool_option(cfg, key, default):
@@ -306,16 +360,20 @@ def load_equipment(path):
     equipment = {}
     order = []
     jump_jets = set()
+    categories = {}
     for row in read_csv_rows(path):
         if JUMP_JET_PATTERN.search(row.get("name", "")):
             jump_jets.add(row["id"])
+        # categorie fixe (JJ, ECM...) tiree du nom interne : sert aux regles de
+        # role, qui ne doivent pas dependre des abreviations personnalisees
+        categories[row["id"]] = guess_equipment_abbreviation(row.get("name", "")) or ""
         abbr = row["abbreviation"].strip()
         if not abbr:
             continue
         equipment[row["id"]] = abbr
         if abbr not in order:
             order.append(abbr)
-    return equipment, order, jump_jets
+    return equipment, order, jump_jets, categories
 
 
 def _to_int(text):
@@ -344,6 +402,9 @@ def load_mech_specs(path):
             "tech": row.get("tech", ""),
             "tonnage": tonnage,
             "speed_factor": _to_float(row.get("speed_factor")) or 16.2,
+            "cockpit_height": _to_float(row.get("cockpit_height")),
+            "chassis_name": row.get("chassis_name") or row.get("chassis", ""),
+            "variant_type": row.get("variant_type") or "Standard",
             "ct_omnipod": row.get("ct_omnipod", ""),
             "fixed_items": [i for i in row.get("fixed_items", "").split(";") if i],
             "hp": {code: _to_float(row.get(f"hp_{code}")) or 0.0 for code in COMPONENT_CODES.values()},
@@ -405,7 +466,7 @@ def load_targeting_computers(path):
 
 
 def load_gamedata():
-    equipment, order, jump_jets = load_equipment(DATA_DIR / "equipment.csv")
+    equipment, order, jump_jets, categories = load_equipment(DATA_DIR / "equipment.csv")
     engines, is_xl = load_engines(DATA_DIR / "engines.csv")
     pods, set_bonuses = load_omnipods(DATA_DIR / "omnipods.csv")
     return {
@@ -414,6 +475,8 @@ def load_gamedata():
         "equipment": equipment,
         "equipment_order": order,
         "jump_jets": jump_jets,
+        "equipment_categories": categories,
+        "role_rules": load_role_rules(DATA_DIR / "roles.csv"),
         "mech_specs": load_mech_specs(DATA_DIR / "mechs.csv"),
         "pods": pods,
         "set_bonuses": set_bonuses,
@@ -454,16 +517,17 @@ def current_profile_name(game_dir):
 
 
 # ---------------------------------------------------------------------------
-# Metadonnees d'un build (proprietaire, date de decouverte) : 3 lignes de
+# Metadonnees d'un build (role, proprietaire, date de decouverte) : 4 lignes de
 # commentaire XML sous la balise <Loadout>, doublees d'un registre local
 # (build_registry.csv, cle = code de build) qui les restaure si le jeu reecrit
 # le fichier et efface les commentaires.
 
+META_ROLE = re.compile(r"<!--\s*role\s*:(.*?)-->")
 META_OWNER = re.compile(r"<!--\s*owner:(.*?)-->")
 META_DATE = re.compile(r"<!--\s*date:(.*?)-->")
 META_CREDIT = f"Generated by Mwobuildmanager ({PROJECT_URL})"
 # reconnait aussi l'ancienne ligne (lien seul) pour la remplacer
-META_LINE = re.compile(r"^[ \t]*<!--\s*(?:owner:|date:|Generated by Mwobuildmanager|"
+META_LINE = re.compile(r"^[ \t]*<!--\s*(?:role\s*:|owner:|date:|Generated by Mwobuildmanager|"
                        + re.escape(PROJECT_URL) + r").*?-->[ \t]*\r?\n",
                        re.MULTILINE)
 
@@ -492,10 +556,12 @@ def read_build_meta(xml_path):
     try:
         raw = Path(xml_path).read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return {"owner": "", "date": ""}
+        return {"role": "", "owner": "", "date": ""}
+    role = META_ROLE.search(raw)
     owner = META_OWNER.search(raw)
     date = META_DATE.search(raw)
-    return {"owner": clean_owner(owner.group(1)) if owner else "",
+    return {"role": clean_owner(role.group(1)) if role else "",
+            "owner": clean_owner(owner.group(1)) if owner else "",
             "date": normalize_date(date.group(1)) if date else ""}
 
 
@@ -509,7 +575,8 @@ def write_build_meta(xml_path, meta):
     first_line_end = body.find("\n") + 1
     if first_line_end == 0:
         return
-    block = newline.join([f" <!-- owner: {meta['owner']} -->", f" <!-- date: {meta['date']} -->",
+    block = newline.join([f" <!-- role: {meta['role']} -->",
+                          f" <!-- owner: {meta['owner']} -->", f" <!-- date: {meta['date']} -->",
                           f" <!-- {META_CREDIT} -->"]) + newline
     updated = body[:first_line_end] + block + body[first_line_end:]
     if updated != raw:
@@ -517,35 +584,40 @@ def write_build_meta(xml_path, meta):
             f.write(updated)
 
 
+META_FIELDS = ("role", "owner", "date")
+
+
 def load_registry():
-    return {row["code"]: {"owner": row.get("owner", ""), "date": row.get("date", "")}
+    return {row["code"]: {field: row.get(field) or "" for field in META_FIELDS}
             for row in read_csv_rows(REGISTRY_PATH) if row.get("code")}
 
 
 def save_registry(registry):
-    rows = [[code, meta["owner"], meta["date"]] for code, meta in sorted(registry.items())]
+    rows = [[code] + [meta.get(field, "") for field in META_FIELDS] for code, meta in sorted(registry.items())]
     with open(REGISTRY_PATH, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["code", "owner", "date"])
+        writer.writerow(["code", *META_FIELDS])
         writer.writerows(rows)
 
 
-def stamp_build(folder, stem, registry, fallback_owner, preferred=None):
+def stamp_build(folder, stem, registry, fallback_owner, preferred=None, classify=None):
     """Complete les metadonnees d'un build : ce qui est deja dans le fichier est
     garde ; sinon les valeurs importees (CSV), puis le registre, puis le profil
-    courant et la date du jour. Ecrit le fichier et le registre, renvoie le resultat."""
+    courant, la date du jour et le role deduit par classify(chemin_xml), calcule
+    seulement s'il manque. Ecrit le fichier et le registre, renvoie le resultat."""
     xml_path = Path(folder) / f"{stem}.xml"
-    mwl_path = Path(folder) / f"{stem}.mwl"
     if not xml_path.exists():
-        return {"owner": "", "date": ""}
-    code = mwl_path.read_text(encoding="utf-8", errors="replace").strip() if mwl_path.exists() else ""
+        return {field: "" for field in META_FIELDS}
+    code = build_code_of(folder, stem)
 
     sources = [read_build_meta(xml_path), preferred or {}, registry.get(code, {}),
                {"owner": fallback_owner, "date": today()}]
     meta = {}
-    for field in ("owner", "date"):
-        clean = clean_owner if field == "owner" else normalize_date
+    for field in META_FIELDS:
+        clean = normalize_date if field == "date" else clean_owner
         meta[field] = next((clean(src.get(field)) for src in sources if clean(src.get(field))), "")
+    if not meta["role"] and classify:
+        meta["role"] = clean_owner(classify(xml_path))
 
     write_build_meta(xml_path, meta)
     if code:
@@ -651,7 +723,7 @@ def extract_codes_from_csv(path):
     """Repere seule la colonne des codes de build, quel que soit l'en-tete.
     Plusieurs delimiteurs sont essayes : ';' est un caractere valide dans un
     code, seul celui qui donne le plus de codes lisibles est retenu.
-    -> (codes, code -> {owner, date}) si l'en-tete a des colonnes owner / date."""
+    -> (codes, code -> {role, owner, date}) si l'en-tete a ces colonnes."""
     raw = Path(path).read_text(encoding="utf-8-sig", errors="replace")
     checked = {}
 
@@ -673,7 +745,7 @@ def extract_codes_from_csv(path):
             continue
         column = max(scores, key=scores.get)
         header = [cell.strip().lower() for cell in rows[0]] if rows else []
-        extra = {field: header.index(field) for field in ("owner", "date") if field in header}
+        extra = {field: header.index(field) for field in META_FIELDS if field in header}
         codes, meta = [], {}
         for row in rows:
             if column < len(row) and is_code(row[column]):
@@ -771,6 +843,95 @@ def decode_build_code(code):
         "components": components,
         "rear_armor": rear_armor,
     }
+
+
+def _code_digits(value, width=None):
+    """Inverse de _code_value : chiffres base 64 little-endian, sur width chiffres
+    (champs fixes) ou le minimum necessaire (objets, omnipods)."""
+    digits = []
+    while True:
+        digits.append(chr(48 + value % 64))
+        value //= 64
+        if value == 0 and len(digits) >= (width or 1):
+            break
+    if width and len(digits) > width:
+        raise BadBuildCode(str(value))
+    return "".join(digits)
+
+
+def encode_build_code(xml_path):
+    """Loadout .xml -> code de partage, pour les builds sans .mwl. Leve
+    BadBuildCode si le fichier est illisible ou utilise une valeur inconnue."""
+    try:
+        root = ET.parse(xml_path).getroot()
+    except (ET.ParseError, OSError):
+        raise BadBuildCode(str(xml_path))
+    upgrades = root.find("Upgrades")
+    actuators = root.find("ActuatorState")
+
+    def upgrade(tag, attr="ItemID"):
+        el = upgrades.find(tag) if upgrades is not None else None
+        return el.attrib.get(attr, "") if el is not None else ""
+
+    try:
+        armor_index = ARMOR_TYPES.index(upgrade("Armor"))
+        structure_index = STRUCTURE_TYPES.index(upgrade("Structure"))
+        heatsink_index = HEATSINK_TYPES.index(upgrade("HeatSinks"))
+        left = ACTUATOR_STATES.index(actuators.attrib.get("LeftActuatorState", ACTUATOR_STATES[0]))
+        right = ACTUATOR_STATES.index(actuators.attrib.get("RightActuatorState", ACTUATOR_STATES[0]))
+        mech_id = int(root.attrib["MechID"])
+    except (ValueError, KeyError, AttributeError):
+        raise BadBuildCode(str(xml_path))
+    artemis = 1 if upgrade("Artemis", "Equipped") == "1" else 0
+
+    components = {c.attrib.get("name", ""): c for c in root.iter("component")}
+    parts = ["A", _code_digits(mech_id, 2), _code_digits(armor_index + 8 * structure_index, 1),
+             _code_digits(artemis | heatsink_index << 1, 1), _code_digits(left * 4 + right, 1)]
+    for name, marker in CODE_COMPONENTS:
+        comp = components.get(name)
+        if marker:
+            parts.append(marker)
+        parts.append(_code_digits(_to_int(comp.attrib.get("Armor")) or 0 if comp is not None else 0, 2))
+        if comp is None:
+            continue
+        if comp.attrib.get("Omnipod"):
+            parts.append(_code_digits(int(comp.attrib["Omnipod"])))
+        for el in comp:
+            if el.tag in ("Weapon", "Module") and el.attrib.get("ItemID", "").isdigit():
+                parts.append("|" + _code_digits(int(el.attrib["ItemID"])))
+    parts.append("w")
+    for name in REAR_COMPONENTS:
+        comp = components.get(name)
+        parts.append(_code_digits(_to_int(comp.attrib.get("Armor")) or 0 if comp is not None else 0, 2))
+    return "".join(parts)
+
+
+def canonical_code(code):
+    """Forme de comparaison d'un code : le bit 3 du 2e chiffre d'en-tete est
+    ignore par le jeu et varie d'un build a l'autre ; un code recalcule depuis
+    le .xml peut donc differer du .mwl du jeu sur ce seul bit."""
+    if len(code) > 4 and code.startswith("A") and 48 <= ord(code[4]) < 112:
+        return code[:4] + chr(48 + ((ord(code[4]) - 48) & ~8)) + code[5:]
+    return code
+
+
+def duplicate_rank(meta, index):
+    """Ordre de preference entre copies d'un meme build : la plus ancienne
+    (date), puis celle qui a un proprietaire, puis la premiere trouvee."""
+    return (meta.get("date") or "9999-99-99", 0 if meta.get("owner") else 1, index)
+
+
+def build_code_of(folder, stem):
+    """Code du build : contenu du .mwl, ou recalcule depuis le .xml s'il manque."""
+    mwl_path = Path(folder) / f"{stem}.mwl"
+    if mwl_path.exists():
+        code = mwl_path.read_text(encoding="utf-8", errors="replace").strip()
+        if code:
+            return code
+    try:
+        return encode_build_code(Path(folder) / f"{stem}.xml")
+    except BadBuildCode:
+        return ""
 
 
 def build_loadout_xml(build, weapons):
@@ -964,6 +1125,7 @@ def build_stats(loadout, weapons, gamedata, structure_modifier):
     quirks = mech_quirks(loadout, gamedata)
 
     stats = {"tech": spec["tech"], "tonnage": spec["tonnage"],
+             "cockpit_height": f"{spec['cockpit_height']:.1f}" if spec["cockpit_height"] is not None else "",
              "weapons": weapon_summary(item_ids, weapons, gamedata),
              "jumpjets": sum(1 for item_id in item_ids if item_id in gamedata["jump_jets"])}
     stats.update(heat_stats(loadout, item_ids, quirks, gamedata))
@@ -992,6 +1154,83 @@ def build_stats(loadout, weapons, gamedata, structure_modifier):
     stats["kill_hp"] = f"{kill:.1f}"
     stats["total_hp"] = f"{sum(hp.values()):.1f}"
     return stats
+
+
+# ---------------------------------------------------------------------------
+# Role d'un build (LRM Boat, Sniper...) : premiere regle de data/roles.csv
+# dont toutes les conditions sont remplies, par priorite croissante. Les
+# regles s'appuient sur les familles d'armes du jeu (HardpointAliases) et les
+# categories d'equipement, jamais sur les abreviations modifiables.
+
+ROLES_CSV_HEADER = ["priority", "role", "families", "min_share", "min_range", "max_range",
+                    "min_speed", "max_speed", "min_tonnage", "max_tonnage", "requires"]
+ROLE_BOUNDS = ("range", "speed", "tonnage")
+
+
+def load_role_rules(path):
+    rules = []
+    for row in read_csv_rows(path):
+        role = (row.get("role") or "").strip()
+        if not role:
+            continue
+        rules.append({
+            "priority": _to_float(row.get("priority")) or 0.0,
+            "role": role,
+            "families": {f.strip().lower() for f in (row.get("families") or "").split("|") if f.strip()},
+            "min_share": _to_float(row.get("min_share")),
+            "bounds": {key: (_to_float(row.get(f"min_{key}")), _to_float(row.get(f"max_{key}")))
+                       for key in ROLE_BOUNDS},
+            "requires": {c.strip().upper() for c in (row.get("requires") or "").split("+") if c.strip()},
+        })
+    rules.sort(key=lambda rule: rule["priority"])
+    return rules
+
+
+def classify_role(item_ids, stats, weapons, gamedata):
+    """Role du build d'apres data/roles.csv ; "" sans regles ou sans correspondance."""
+    utility = gamedata["equipment_categories"]
+    total = 0.0
+    mounted = []
+    for item_id in item_ids:
+        if item_id in weapons and item_id not in utility:
+            tons = weapons[item_id][1]
+            name, _range, aliases = gamedata["weapon_ranges"].get(item_id, ("", None, set()))
+            mounted.append((tons, aliases | {name.lower()}))
+            total += tons
+    categories = {utility[item_id] for item_id in item_ids if utility.get(item_id)}
+    values = {"range": _to_float(stats.get("optimal_range")), "speed": _to_float(stats.get("max_speed")),
+              "tonnage": _to_float(stats.get("tonnage"))}
+
+    for rule in gamedata["role_rules"]:
+        if rule["families"]:
+            share = (sum(tons for tons, families in mounted if families & rule["families"]) / total
+                     if total else 0.0)
+            if share <= 0 or share < (rule["min_share"] or 0.0):
+                continue
+        if not rule["requires"] <= categories:
+            continue
+        in_bounds = True
+        for key, (low, high) in rule["bounds"].items():
+            value = values[key]
+            if (low is not None or high is not None) and value is None:
+                in_bounds = False
+            elif (low is not None and value < low) or (high is not None and value > high):
+                in_bounds = False
+        if in_bounds:
+            return rule["role"]
+    return ""
+
+
+def auto_role(loadout, weapons, gamedata):
+    if loadout is None or not gamedata["role_rules"]:
+        return ""
+    stats = build_stats(loadout, weapons, gamedata, DEFAULT_STRUCTURE_MODIFIER)
+    return classify_role(effective_item_ids(loadout, gamedata), stats, weapons, gamedata)
+
+
+def role_classifier(weapons, gamedata):
+    """Fonction chemin .xml -> role deduit, pour stamp_build()."""
+    return lambda xml_path: auto_role(loadout_from_xml(xml_path), weapons, gamedata)
 
 
 class NoQualifyingWeapon(ValueError):
@@ -1544,19 +1783,100 @@ def iter_mech_pak_files(game_root, suffix):
                         continue
 
 
-MECHS_CSV_HEADER = (["id", "chassis", "variant", "tech", "tonnage", "speed_factor",
+MECHS_CSV_HEADER = (["id", "chassis", "chassis_name", "variant", "variant_type", "tech", "tonnage",
+                     "speed_factor", "cockpit_height",
                      "ct_omnipod", "fixed_items"]
                     + [f"hp_{code}" for code in COMPONENT_CODES.values()] + ["quirks"])
 
 
+def cockpit_heights(game_root):
+    """chassis -> hauteur du cockpit en metres : position verticale (Z) de
+    l'attache "cockpit" dans Objects/mechs/<chassis>/<chassis>.cdf."""
+    heights = {}
+    for name, root in iter_mech_pak_files(game_root, ".cdf"):
+        parts = name.replace("\\", "/").split("/")
+        if len(parts) != 4 or parts[3].lower() != f"{parts[2].lower()}.cdf":
+            continue  # les .cdf de cockpit / d'accessoires ne comptent pas
+        for att in root.iter("Attachment"):
+            if att.attrib.get("AName", "").lower() == "cockpit":
+                coords = att.attrib.get("Position", "").split(",")
+                if len(coords) == 3 and _to_float(coords[2]) is not None:
+                    heights[parts[2].lower()] = float(coords[2])
+                break
+    return heights
+
+
+ROMAN_TOKEN = re.compile(r"^[IVXC]+$")
+
+
+def display_case(text):
+    """"COMMANDO IIC" -> "Commando IIC", "BLACK HAWK-KU" -> "Black Hawk-KU" : casse
+    titre, sauf chiffres romains (II, IIC), sigles de 2 lettres, Mk et ...Mech."""
+    def word(token):
+        if token == "MK":
+            return "Mk"
+        if ROMAN_TOKEN.match(token) or (len(token) <= 2 and token.isalpha()):
+            return token.upper()
+        if token.endswith("MECH") and len(token) > 4:  # URBANMECH -> UrbanMech
+            return token[:-4].capitalize() + "Mech"
+        return token.capitalize()
+    return re.sub(r"[A-Za-z]+", lambda m: word(m.group(0).upper()), text.strip())
+
+
+def chassis_display_names(game_root):
+    """chassis interne -> nom affiche en jeu (localisation anglaise, cle = nom interne)."""
+    pak = Path(game_root) / "Localized" / "English_xml.pak"
+    names = {}
+    try:
+        with zipfile.ZipFile(pak) as z:
+            raw = z.read("Localization/English/TheRealLoc.xml").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return names
+    for row in re.findall(r"<Row>(.*?)</Row>", raw, re.S):
+        cells = re.findall(r'<Data ss:Type="String">(.*?)</Data>', row, re.S)
+        if len(cells) >= 2:
+            names.setdefault(cells[0].lstrip("@").lower(), cells[1])
+    return names
+
+
+def variant_types(mdfs, ids_by_variant):
+    """variante -> Standard / Hero / Legend. Legend = nom en ...lgd, plus sa
+    version sans (L) : meme nom sans "lgd", ou VariantParent pointant vers elle
+    (souvent bannies en competition, elles doivent rester reperables)."""
+    legends = {variant for variant in mdfs if variant.endswith("lgd")}
+    variant_by_id = {mech_id: variant for variant, mech_id in ids_by_variant.items()}
+    types = {}
+    for variant, mdf in mdfs.items():
+        mech = mdf.find("Mech")
+        attrs = {k.lower(): v for k, v in (mech.attrib if mech is not None else {}).items()}
+        parent = variant_by_id.get(attrs.get("variantparent", ""))
+        if variant in legends or f"{variant}lgd" in legends or parent in legends:
+            types[variant] = "Legend"
+        elif attrs.get("varianttype", "").lower() in ("hero", "sarah"):
+            types[variant] = "Hero"
+        else:
+            types[variant] = "Standard"
+    return types
+
+
 def fetch_mechs_from_game(game_root):
     mdfs = {Path(name).stem.lower(): root for name, root in iter_mech_pak_files(game_root, ".mdf")}
+    heights = cockpit_heights(game_root)
+    display_names = chassis_display_names(game_root)
+    mech_list = list(read_pak_xml(Path(game_root) / "GameData.pak", "Libs/Items/Mechs/Mechs.xml").iter("Mech"))
+    types = variant_types(mdfs, {el.attrib.get("name", "").lower(): el.attrib["id"] for el in mech_list})
     rows = []
-    for el in read_pak_xml(Path(game_root) / "GameData.pak", "Libs/Items/Mechs/Mechs.xml").iter("Mech"):
+    for el in mech_list:
         variant = el.attrib.get("name", "?")
         tech = "CLAN" if "clan" in el.attrib.get("faction", "").lower() else "IS"
         row = {"id": el.attrib["id"], "chassis": el.attrib.get("chassis", "?"),
                "variant": variant, "tech": tech}
+        row["variant_type"] = types.get(variant.lower(), "Standard")
+        display = display_names.get(row["chassis"].lower())
+        row["chassis_name"] = display_case(display) if display else row["chassis"]
+        height = heights.get(row["chassis"].lower())
+        if height is not None:
+            row["cockpit_height"] = f"{height:.2f}"
         mdf = mdfs.get(variant.lower())
         if mdf is not None:
             mech = mdf.find("Mech")
@@ -1935,30 +2255,48 @@ def structure_modifier(cfg):
 
 def export_csv(game_dir, basenames, dest_dir, name, mechs, weapons, gamedata, modifier, columns):
     """Une ligne par build : identite du build puis statistiques calculees.
-    Les metadonnees manquantes sont completees dans les fichiers au passage."""
+    Les metadonnees manquantes sont completees dans les fichiers au passage.
+    Un meme code n'apparait qu'une fois : on garde le build le plus ancien
+    (date), puis celui qui a un proprietaire, puis le premier trouve."""
     owner = current_profile_name(game_dir)
     registry = load_registry()
-    rows = []
+    classify = role_classifier(weapons, gamedata)
+    candidates = []
     unknown = 0
-    for basename in basenames:
-        mwl_path = game_dir / f"{basename}.mwl"
-        code = mwl_path.read_text(encoding="utf-8", errors="replace").strip() if mwl_path.exists() else ""
+    for index, basename in enumerate(basenames):
+        code = build_code_of(game_dir, basename)
         loadout = loadout_from_xml(game_dir / f"{basename}.xml")
-        _chassis, variant = mechs.get(loadout["mech_id"] if loadout else "", ("", ""))
+        chassis, variant = mechs.get(loadout["mech_id"] if loadout else "", ("", ""))
+        spec = gamedata["mech_specs"].get(loadout["mech_id"]) if loadout else None
         stats = build_stats(loadout, weapons, gamedata, modifier)
         if not stats:
             unknown += 1
-        meta = stamp_build(game_dir, basename, registry, owner)
+        # le tri des doublons se fait sur ce que le fichier contenait avant d'etre
+        # complete (sinon une copie heriterait via le registre des infos d'une autre)
+        original = read_build_meta(game_dir / f"{basename}.xml")
+        meta = stamp_build(game_dir, basename, registry, owner, classify=classify)
         stats.update({"name": basename, "buildcode": code, "mechvariant": (variant or "").upper(),
-                      "owner": meta["owner"], "date": meta["date"]})
+                      "mechtype": spec["chassis_name"] if spec else (chassis or ""),
+                      "variant_type": spec["variant_type"] if spec else "",
+                      "role": meta["role"], "owner": meta["owner"], "date": meta["date"]})
         if stats.get("tonnage"):
             stats["class"] = weight_class(stats["tonnage"])
-        rows.append([stats.get(column, "") for column in columns])
+        candidates.append((stats, original, index))
+
+    kept = {}
+    for stats, original, index in candidates:
+        # sans code : jamais considere comme doublon
+        key = canonical_code(stats["buildcode"]) if stats["buildcode"] else f"\0{index}"
+        rank = duplicate_rank(original, index)
+        if key not in kept or rank < kept[key][0]:
+            kept[key] = (rank, stats)
+    rows = [[stats.get(column, "") for column in columns]
+            for _rank, stats in sorted(kept.values(), key=lambda item: item[0][2])]
 
     save_registry(registry)
     csv_path = dest_dir / f"{name}.csv"
     write_csv(csv_path, columns, rows)
-    return csv_path, len(rows), unknown, owner
+    return csv_path, len(rows), unknown, owner, len(candidates) - len(rows)
 
 
 def do_export(cfg, mechs, weapons, gamedata, t):
@@ -1989,13 +2327,15 @@ def do_export(cfg, mechs, weapons, gamedata, t):
         return
 
     if kind == "csv":
-        csv_path, count, unknown, owner = export_csv(game_dir, basenames, dest_dir, name, mechs, weapons,
+        csv_path, count, unknown, owner, duplicates = export_csv(game_dir, basenames, dest_dir, name, mechs, weapons,
                                                      gamedata, structure_modifier(cfg), csv_columns(cfg))
         cfg["last_used"]["export_dir"] = str(dest_dir)
         save_config(cfg)
         print(t("export_csv_done", n=count, path=csv_path))
         if not owner:
             print(t("export_csv_no_owner"))
+        if duplicates:
+            print(t("export_csv_duplicates", n=duplicates))
         if unknown:
             print(t("export_csv_no_specs", n=unknown))
         return
@@ -2097,6 +2437,60 @@ def ask_import_dest(cfg, t):
                       manual_prompt_key="manual_import_dest_prompt")
 
 
+def create_missing_codes(folder):
+    """Ecrit le .mwl (recalcule depuis le .xml) des builds qui n'en ont pas."""
+    created = 0
+    for stem in find_loadout_basenames(folder):
+        mwl_path = folder / f"{stem}.mwl"
+        if mwl_path.exists() and mwl_path.read_text(encoding="utf-8", errors="replace").strip():
+            continue
+        try:
+            code = encode_build_code(folder / f"{stem}.xml")
+        except BadBuildCode:
+            continue
+        with open(mwl_path, "w", encoding="utf-8", newline="") as f:
+            f.write(code)  # comme le jeu : une seule ligne, sans retour final
+        created += 1
+    return created
+
+
+def find_duplicates(folder):
+    """[(copie en trop, copie gardee)] pour les builds de meme code du dossier."""
+    groups = {}
+    for index, stem in enumerate(find_loadout_basenames(folder)):
+        code = build_code_of(folder, stem)
+        if code:
+            meta = read_build_meta(folder / f"{stem}.xml")
+            groups.setdefault(canonical_code(code), []).append((duplicate_rank(meta, index), stem))
+    duplicates = []
+    for copies in groups.values():
+        copies.sort()
+        duplicates.extend((stem, copies[0][1]) for _rank, stem in copies[1:])
+    return sorted(duplicates)
+
+
+def tidy_folder(folder, cfg, t):
+    """Apres un import : cree les .mwl manquants, puis propose de supprimer les
+    doublons (sauvegarde du dossier avant, si l'option est active)."""
+    created = create_missing_codes(folder)
+    if created:
+        print(t("tidy_mwl_created", n=created, path=folder))
+    duplicates = find_duplicates(folder)
+    if not duplicates:
+        return
+    print(t("tidy_duplicates_found", n=len(duplicates)))
+    for stem, kept in duplicates:
+        print(t("tidy_duplicate_line", name=stem, kept=kept))
+    if not ask_yes_no(t, "tidy_duplicates_confirm"):
+        return
+    if cfg["general"].getboolean("backup_before_rename", fallback=True):
+        print(t("backup_created", path=make_backup(folder)))
+    for stem, _kept in duplicates:
+        for ext in (".xml", ".mwl"):
+            (folder / f"{stem}{ext}").unlink(missing_ok=True)
+    print(t("tidy_duplicates_removed", n=len(duplicates)))
+
+
 def do_import(cfg, mechs, weapons, gamedata, t):
     codes, imported_meta = read_build_codes(cfg, t)
     if not codes:
@@ -2162,20 +2556,30 @@ def do_import(cfg, mechs, weapons, gamedata, t):
     used_names = {p.name.lower() for p in dest.iterdir()}
     registry = load_registry()
     owner = fallback_owner(cfg)
+    classify = role_classifier(weapons, gamedata)
+    present = {canonical_code(build_code_of(dest, stem)) for stem in find_loadout_basenames(dest)}
     written = 0
+    already = 0
     for i, (code, build, name) in enumerate(plan, start=1):
         if i not in selection:
             continue
+        if canonical_code(code) in present:  # deja dans le dossier : pas de doublon
+            already += 1
+            continue
+        present.add(canonical_code(code))
         stem = unique_pair_stem(name, used_names)
         with open(dest / f"{stem}.xml", "w", encoding="utf-8", newline="") as f:
             f.write(build_loadout_xml(build, weapons))
         with open(dest / f"{stem}.mwl", "w", encoding="utf-8", newline="") as f:
             f.write(code)
-        stamp_build(dest, stem, registry, owner, imported_meta.get(code))
+        stamp_build(dest, stem, registry, owner, imported_meta.get(code), classify)
         written += 1
     save_registry(registry)
 
     print(t("import_done", n=written, path=dest))
+    if already:
+        print(t("import_already_present", n=already))
+    tidy_folder(dest, cfg, t)
 
 
 # ---------------------------------------------------------------------------
@@ -2238,12 +2642,13 @@ def run_rename(folder, opts, cfg, mechs, weapons, gamedata, t):
     used_names = {p.name.lower() for p in folder.iterdir()}
     registry = load_registry()
     owner = fallback_owner(cfg)
+    classify = role_classifier(weapons, gamedata)
     renamed_stems = []
     for i, (old, new_stem) in enumerate(plan, start=1):
         if i not in selection:
             continue
         if old == new_stem:
-            stamp_build(folder, old, registry, owner)
+            stamp_build(folder, old, registry, owner, classify=classify)
             continue
         used_names.discard(f"{old}.xml".lower())
         used_names.discard(f"{old}.mwl".lower())
@@ -2252,7 +2657,7 @@ def run_rename(folder, opts, cfg, mechs, weapons, gamedata, t):
             src = folder / f"{old}{ext}"
             if src.exists():
                 src.rename(folder / f"{final_stem}{ext}")
-        stamp_build(folder, final_stem, registry, owner)
+        stamp_build(folder, final_stem, registry, owner, classify=classify)
         renamed_stems.append(final_stem)
     save_registry(registry)
 
@@ -2362,7 +2767,9 @@ def settings_menu(cfg, t):
         print(f"3) {t('settings_installdir', path=install_dir)}")
         print(f"4) {t('settings_backup', state=backup_state)}")
         print(f"5) {t('settings_structure_modifier', value=structure_modifier(cfg))}")
-        print(f"6) {t('settings_back')}")
+        update_state = t("state_on") if bool_option(cfg, "check_updates", True) else t("state_off")
+        print(f"6) {t('settings_check_updates', state=update_state)}")
+        print(f"7) {t('settings_back')}")
         choice = input(t("menu_prompt")).strip()
 
         if choice == "1":
@@ -2395,9 +2802,87 @@ def settings_menu(cfg, t):
                 cfg["general"]["structure_modifier"] = f"{value:g}"
                 save_config(cfg)
         elif choice == "6":
+            cfg["general"]["check_updates"] = str(not bool_option(cfg, "check_updates", True)).lower()
+            save_config(cfg)
+        elif choice == "7":
             return t
         else:
             print(t("menu_invalid"))
+
+
+# ---------------------------------------------------------------------------
+# Interface : verification de version, effacement d'ecran, encadre
+
+def fetch_latest_version(timeout=4):
+    """Version publiee sur GitHub, ou None (hors ligne, GitHub injoignable...)."""
+    try:
+        with urllib.request.urlopen(VERSION_URL, timeout=timeout) as response:
+            text = response.read(32).decode("ascii", "replace").strip()
+    except Exception:
+        return None
+    return text if re.fullmatch(r"\d+(\.\d+)*", text) else None
+
+
+class UpdateCheck:
+    """Interroge GitHub en arriere-plan pour ne pas retarder l'affichage du menu."""
+
+    def __init__(self, enabled):
+        self.latest = None
+        self._thread = None
+        if enabled:
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+    def _run(self):
+        self.latest = fetch_latest_version()
+
+    def newer_version(self, wait=0.0):
+        if self._thread is not None:
+            self._thread.join(wait)
+        if self.latest and version_tuple(self.latest) > version_tuple(VERSION):
+            return self.latest
+        return None
+
+
+def interactive():
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def clear_screen():
+    if interactive():
+        if os.name == "nt":
+            os.system("cls")
+        else:
+            print("\033[2J\033[H", end="", flush=True)
+
+
+def pause(t):
+    """Laisse lire le resultat d'une action avant que le menu n'efface l'ecran."""
+    if interactive():
+        input(t("press_enter"))
+
+
+def display_width(text):
+    """Largeur a l'ecran : les caracteres chinois comptent double, les signes
+    combinants (voyelles thai...) ne prennent pas de place."""
+    width = 0
+    for char in text:
+        if unicodedata.combining(char) or unicodedata.category(char) in ("Mn", "Me", "Cf"):
+            continue
+        width += 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+    return width
+
+
+def boxed(lines):
+    width = max(display_width(line) for line in lines)
+    border = "+" + "=" * (width + 4) + "+"
+    body = [f"|  {line}{' ' * (width - display_width(line))}  |" for line in lines]
+    return "\n".join([border, *body, border])
+
+
+def support_box(t):
+    lines = [f"*** {t('menu_support')} ***", ""] + t("support_text", url=DONATE_URL).split("\n")
+    return boxed(lines)
 
 
 def migrate_data_files():
@@ -2412,7 +2897,6 @@ def migrate_data_files():
 
 
 def main():
-    print(f"{APP_NAME} {VERSION}")
     migrate_data_files()
     mechs_csv = DATA_DIR / "mechs.csv"
     weapons_csv = DATA_DIR / "weapons.csv"
@@ -2438,9 +2922,25 @@ def main():
         added = apply_config_defaults(cfg)
         if added:
             print(t("config_defaults_added", n=added, path=CONFIG_PATH))
+    upgrade_config(cfg)
     warn_unknown_options(cfg, t)
+    updates = UpdateCheck(bool_option(cfg, "check_updates", True))
 
+    # le premier affichage garde les messages de demarrage ; ensuite l'ecran est
+    # efface avant chaque menu (apres une pause pour lire le resultat)
+    first_screen = True
+    notice = ""
     while True:
+        if not first_screen:
+            clear_screen()
+        print(f"{APP_NAME} {VERSION}")
+        newer = updates.newer_version(wait=2.0 if first_screen else 0.0)
+        if newer:
+            print(t("update_available", latest=newer, current=VERSION, url=PROJECT_URL))
+        first_screen = False
+        if notice:
+            print(notice)
+            notice = ""
         print(t("menu_title"))
         print(f"1) {t('menu_quick')}  ({t('menu_quick_example', example=quick_example(cfg))})")
         print(f"2) {t('menu_advanced')}")
@@ -2453,6 +2953,12 @@ def main():
         print(f"9) {t('menu_exit')}")
         choice = input(t("menu_prompt")).strip()
 
+        if choice == "9":
+            break
+        if choice not in [str(n) for n in range(1, 9)]:
+            notice = t("menu_invalid")
+            continue
+        clear_screen()
         if choice == "1":
             do_quick(cfg, mechs, weapons, gamedata, t)
         elif choice == "2":
@@ -2467,12 +2973,10 @@ def main():
             t = do_reset(cfg, mechs, weapons, gamedata, t)
         elif choice == "7":
             t = settings_menu(cfg, t)
+            continue  # les reglages ont leur propre boucle, rien a relire
         elif choice == "8":
-            print(t("support_text", url=DONATE_URL))
-        elif choice == "9":
-            break
-        else:
-            print(t("menu_invalid"))
+            print(support_box(t))
+        pause(t)
 
 
 if __name__ == "__main__":
